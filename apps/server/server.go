@@ -1,4 +1,4 @@
-package server
+package main
 
 import (
 	"flag"
@@ -29,7 +29,7 @@ func Initialize() {
 		err error
 	)
 	flag.BoolVar(&ctx.isSync, "sync", true, "mode of client")
-	flag.StringVar(&ctx.bind, "bind", "0.0.0.0:1901", "address to bind")
+	flag.StringVar(&ctx.bind, "bind", "0.0.0.0:1900", "address to bind")
 	flag.Parse()
 
 	if ctx.tcpAddr, err = net.ResolveTCPAddr("tcp", ctx.bind); err != nil {
@@ -62,9 +62,11 @@ func main() {
 
 //HandleTCP some test worker for communication
 func HandleTCP(conn *net.TCPConn, instanceNum int) {
+	defer conn.Close()
 	conn.SetReadBuffer(fdstream.MaxMessageSize * 20)
 	conn.SetWriteBuffer(fdstream.MaxMessageSize * 20)
 	conn.SetKeepAlive(true)
+	logger.Printf("Handle connection: %s", conn.RemoteAddr().String())
 	cl, err := fdstream.NewAsyncHandler(conn, conn)
 
 	var (
@@ -72,13 +74,15 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) {
 	)
 	for cl.IsAlive() {
 		i++
+
 		message := cl.Read()
+		logger.Printf("Get message")
 		if err != nil {
 			logger.Printf("Error respoonce: %v\n", err)
 		}
 		message.Payload = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
 		cl.Write(message)
-
 	}
+
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 }

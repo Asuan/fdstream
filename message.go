@@ -11,7 +11,8 @@ import (
 
 //Max size of message
 const (
-	MaxMessageSize = 1e5
+	MaxMessageSize    = 1e5
+	messageHeaderSize = 7
 )
 
 var (
@@ -62,7 +63,7 @@ func (m *Message) Marshal() ([]byte, error) {
 //Unmarshal create message from specified byte array
 func Unmarshal(b []byte) (*Message, error) {
 
-	if len(b) < 7 {
+	if len(b) < messageHeaderSize {
 		return nil, ErrTooShortMessage
 	}
 	var (
@@ -73,26 +74,26 @@ func Unmarshal(b []byte) (*Message, error) {
 
 	code, nameLen, routeLen, payloadLen = UnmarshalHeader(b)
 	m = newMessage(code, nameLen, routeLen, payloadLen)
-	if len(b) != int(7+nameLen+routeLen+payloadLen) {
+	if len(b) != int(messageHeaderSize+nameLen+routeLen+payloadLen) {
 		return nil, ErrBinaryLength
 	}
 
 	//TODO optimize
 	if nameLen > 0 {
-		copy(m.Name, b[7:7+int(nameLen)])
+		copy(m.Name, b[messageHeaderSize:messageHeaderSize+int(nameLen)])
 	}
 	if routeLen > 0 {
-		copy(m.Route, b[7+int(nameLen):7+int(nameLen)+int(routeLen)])
+		copy(m.Route, b[messageHeaderSize+int(nameLen):messageHeaderSize+int(nameLen)+int(routeLen)])
 	}
 
 	if payloadLen > 0 {
-		copy(m.Payload, b[7+int(nameLen)+int(routeLen):7+int(nameLen)+int(routeLen)+int(payloadLen)])
+		copy(m.Payload, b[messageHeaderSize+int(nameLen)+int(routeLen):messageHeaderSize+int(nameLen)+int(routeLen)+int(payloadLen)])
 	}
 	return m, nil
 
 }
 
-//UnmarshalHeader is unsafe read expect at least 5 bytes length
+//UnmarshalHeader is unsafe read expect at least 7 bytes length
 func UnmarshalHeader(b []byte) (code byte, nameLen, routeLen, payloadLen uint16) {
 	code = b[0]
 	nameLen = binary.BigEndian.Uint16(b[1:3])
@@ -111,5 +112,5 @@ func newMessage(acion byte, nameLen, routeLen, payloadLen uint16) *Message {
 }
 
 func (m *Message) Len() int {
-	return 7 + len(m.Name) + len(m.Route) + len(m.Payload)
+	return messageHeaderSize + len(m.Name) + len(m.Route) + len(m.Payload)
 }

@@ -1,4 +1,4 @@
-package client
+package main
 
 import (
 	"bytes"
@@ -53,9 +53,11 @@ func main() {
 	conn.SetWriteBuffer(fdstream.MaxMessageSize * 20)
 	conn.SetKeepAlive(true)
 	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(2*time.Minute))
-
-	wg.Add(20)
-	for i := 0; i < 20; i++ {
+	if err != nil {
+		logger.Printf("Could not create instance %v", err)
+	}
+	wg.Add(60)
+	for i := 0; i < 60; i++ {
 		logger.Printf("Start client %d", i)
 		go HandlerClient(cl, i)
 	}
@@ -80,6 +82,7 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		name := fmt.Sprintf("Client%d-M%d", instanceNum, i)
 		message = &fdstream.Message{
 			Name:    []byte(name),
+			Route:   []byte{},
 			Payload: make([]byte, r*3, r*3),
 		}
 		totalSend += message.Len()
