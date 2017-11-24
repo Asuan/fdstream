@@ -77,15 +77,16 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 	)
 	for cl.IsAlive() {
 		i++
-		r := rand.Intn(500)
+		r := rand.Intn(200)
 		time.Sleep(time.Duration(r) * time.Millisecond)
 		name := fmt.Sprintf("Client%d-M%d", instanceNum, i)
 		message = &fdstream.Message{
 			Name:    []byte(name),
 			Route:   []byte{},
-			Payload: make([]byte, r*3, r*3),
+			Payload: make([]byte, r*5, r*5),
 		}
 		totalSend += message.Len()
+		start := time.Now()
 		if responce, err = cl.WriteAndReadResponce(message); err == nil {
 			if !bytes.Equal(responce.Name, message.Name) {
 				logger.Printf("Wrong responce client %d %dmessage %s want: %s", instanceNum, i, string(message.Name), string(responce.Name))
@@ -93,6 +94,8 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		} else {
 			logger.Printf("Error in responce client %d %dmessage %v", instanceNum, i, err)
 		}
+		delta := time.Now().Sub(start)
+		logger.Printf("Wait responce during %v client %d %dmessage", delta, instanceNum, i)
 	}
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSend)

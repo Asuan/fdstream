@@ -68,7 +68,10 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	returnWorker := func(c *SyncronizedSingleToneClient) {
 		tiker := time.NewTicker(c.defaultTimeout / 3)
 		returnTiker := time.NewTicker(200 * time.Millisecond)
-		for {
+		defer tiker.Stop()
+		defer returnTiker.Stop()
+
+		for asyncClient.alive {
 			select {
 			case <-tiker.C: //cleanup old messages
 				now := time.Now().UnixNano()
@@ -90,6 +93,7 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 					r.responce <- m.message
 					delete(c.unknowMessage, name)
 				} else {
+					r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
 					c.messageToReturn[name] = r
 				}
 
@@ -101,10 +105,31 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 						delete(c.messageToReturn, k)
 					}
 				}
-
+				if !c.IsAlive() {
+					return
+				}
+			case m := <-asyncClient.toReadMessageQ: //read income messages
+				name := string(m.Name)
+				if r, ok := c.messageToReturn[name]; ok {
+					r.responce <- m
+					delete(c.messageToReturn, name)
+				} else {
+					c.unknowMessage[string(m.Name)] = &messageWithTimeout{
+						message: m,
+						timeout: time.Now().Add(c.defaultTimeout).UnixNano(),
+					}
+				}
 			}
 		}
-		returnTiker.Stop()
+
+		for n, v := range c.messageToReturn { //TODO fire not timeout but another
+			v.responce <- ErrMessageMarker
+			delete(c.messageToReturn, n)
+		}
+		for r := range c.returnerMessageQ {
+			r.responce <- ErrMessageMarker
+		}
+
 	}
 
 	go returnWorker(c)
