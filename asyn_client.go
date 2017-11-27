@@ -51,9 +51,15 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 
 	//Read message by message
 	workerReader := func(c *AsyncClient) {
+		var (
+			n   int
+			err error
+
+			lenN, lenR, lenP int
+		)
 		header := make([]byte, messageHeaderSize, messageHeaderSize)
 		for {
-			n, err := c.Source.Read(header)
+			n, err = c.Source.Read(header)
 			if err != nil { //io.EOF or ect communication error
 				c.shutdown()
 				return
@@ -68,19 +74,19 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 			}
 			m := newMessage(UnmarshalHeader(header))
 			if len(m.Name) > 0 {
-				if lenN, err := c.Source.Read(m.Name); lenN != len(m.Name) || err != nil {
+				if lenN, err = c.Source.Read(m.Name); lenN != len(m.Name) || err != nil {
 					c.shutdown()
 					return
 				}
 			}
 			if len(m.Route) > 0 {
-				if lenR, err := c.Source.Read(m.Name); lenR != len(m.Route) || err != nil {
+				if lenR, err = c.Source.Read(m.Name); lenR != len(m.Route) || err != nil {
 					c.shutdown()
 					return
 				}
 			}
 			if len(m.Payload) > 0 {
-				if lenV, err := c.Source.Read(m.Payload); lenV != len(m.Payload) || err != nil {
+				if lenP, err = c.Source.Read(m.Payload); lenP != len(m.Payload) || err != nil {
 					c.shutdown()
 					return
 				}
