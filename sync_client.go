@@ -71,7 +71,7 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 		defer tiker.Stop()
 		defer returnTiker.Stop()
 
-		for asyncClient.alive {
+		for asyncClient.IsAlive() {
 			select {
 			case <-tiker.C: //cleanup old messages
 				now := time.Now().UnixNano()
@@ -187,5 +187,5 @@ func (c *SyncronizedSingleToneClient) Read(name string) (*Message, error) {
 }
 
 func (c *SyncronizedSingleToneClient) IsAlive() bool {
-	return c.async.alive
+	return c.async.IsAlive()
 }

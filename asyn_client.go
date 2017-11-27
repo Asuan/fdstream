@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 )
 
 const DefaultQSize = 200
@@ -34,7 +35,7 @@ type AsyncClient struct {
 	toReadMessageQ chan *Message //Queue to return back
 	killer         sync.Once
 	kill           chan bool
-	alive          bool
+	alive          atomic.Value
 }
 
 //NewAsyncHandler create async handler
@@ -45,8 +46,8 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 		toSendMessageQ: make(chan *Message, DefaultQSize),
 		toReadMessageQ: make(chan *Message, DefaultQSize),
 		kill:           make(chan bool),
-		alive:          true,
 	}
+	c.alive.Store(true)
 
 	//Read message by message
 	workerReader := func(c *AsyncClient) {
@@ -120,17 +121,17 @@ func (c *AsyncClient) Write(m *Message) error {
 	return ErrNilMessage
 }
 
-func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaller) error {
-	if b, err := m.Marshal(); err == nil {
+func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaller) (err error) {
+	var b []byte
+	if b, err = m.Marshal(); err == nil {
 		return c.Write(
 			&Message{
 				Code:    code,
 				Name:    []byte(name), //TODO unsafe byte read
 				Payload: b,
 			})
-	} else {
-		return err
 	}
+	return err
 
 }
 
@@ -147,10 +148,11 @@ func (c *AsyncClient) shutdown() {
 		close(c.kill)         //It should stop writer
 		//TODO save unprocessed data
 		//TODO kill instance to clean data in q
-		c.alive = false
+
 	})
+	c.alive.Store(false)
 }
 
 func (c *AsyncClient) IsAlive() bool {
-	return c.alive
+	return c.alive.Load().(bool)
 }
