@@ -11,8 +11,11 @@ import (
 
 //Max size of message
 const (
-	MaxMessageSize    = 1e5
-	messageHeaderSize = 7
+	MaxMessageSize          = 1e5
+	messageHeaderSize       = 7
+	erMissRoutingCode  byte = 254
+	erGeneralErrorCode byte = 255
+	erTimeoutCode      byte = 253
 )
 
 var (
@@ -22,9 +25,11 @@ var (
 )
 
 type Message struct {
+	Name  string
+	Route string
+	//Code is an a flag of somebody, fill free to use flag < 200
+	//code with value more than 200 mean some error or problem
 	Code    byte
-	Name    []byte
-	Route   []byte
 	Payload []byte
 }
 
@@ -56,8 +61,8 @@ func (m *Message) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint16(b, uintValueLen)
 	buf.Write(b)
 
-	buf.Write(m.Name)
-	buf.Write(m.Route)
+	buf.WriteString(m.Name)
+	buf.WriteString(m.Route)
 	buf.Write(m.Payload)
 	res := buf.Bytes()
 	bufferPool.Put(buf)
@@ -77,17 +82,18 @@ func Unmarshal(b []byte) (*Message, error) {
 	)
 
 	code, nameLen, routeLen, payloadLen = UnmarshalHeader(b)
-	m = newMessage(code, nameLen, routeLen, payloadLen)
+	m = newMessage(code, payloadLen)
 	if len(b) != int(messageHeaderSize+nameLen+routeLen+payloadLen) {
 		return nil, ErrBinaryLength
 	}
 
 	//TODO optimize
 	if nameLen > 0 {
-		copy(m.Name, b[messageHeaderSize:messageHeaderSize+int(nameLen)])
+		m.Name = string(b[messageHeaderSize : messageHeaderSize+int(nameLen)])
 	}
+
 	if routeLen > 0 {
-		copy(m.Route, b[messageHeaderSize+int(nameLen):messageHeaderSize+int(nameLen)+int(routeLen)])
+		m.Route = string(b[messageHeaderSize+int(nameLen) : messageHeaderSize+int(nameLen)+int(routeLen)])
 	}
 
 	if payloadLen > 0 {
@@ -106,15 +112,15 @@ func UnmarshalHeader(b []byte) (code byte, nameLen, routeLen, payloadLen uint16)
 	return
 }
 
-func newMessage(acion byte, nameLen, routeLen, payloadLen uint16) *Message {
+func newMessage(acion byte, payloadLen uint16) *Message {
 	return &Message{
-		Code:    acion,
-		Name:    make([]byte, int(nameLen), int(nameLen)),
-		Route:   make([]byte, int(routeLen), int(routeLen)),
+		Code: acion,
+
 		Payload: make([]byte, int(payloadLen), int(payloadLen)),
 	}
 }
 
+//Len calcualte current length of message in bytes
 func (m *Message) Len() int {
 	return messageHeaderSize + len(m.Name) + len(m.Route) + len(m.Payload)
 }

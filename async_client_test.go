@@ -56,14 +56,14 @@ func TestWrite(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		m := &Message{
 			Code:    byte(i),
-			Name:    []byte("name" + strconv.Itoa(i)),
+			Name:    "name" + strconv.Itoa(i),
 			Payload: []byte("value" + strconv.Itoa(i)),
 		}
 		testMessages[i] = m
 		if i%2 == 0 {
 			handler.Write(m)
 		} else {
-			handler.WriteNamed(byte(i), "ota", m)
+			handler.WriteNamed(byte(i), "ota", "", m)
 		}
 	}
 	time.Sleep(100 * time.Microsecond)
@@ -71,7 +71,7 @@ func TestWrite(t *testing.T) {
 	for _, reciaveMessages := range testWriter.m {
 		exist := false
 		for _, sended := range testMessages {
-			if bytes.Contains(reciaveMessages, sended.Payload) && bytes.Contains(reciaveMessages, sended.Name) {
+			if bytes.Contains(reciaveMessages, sended.Payload) && bytes.Contains(reciaveMessages, []byte(sended.Name)) {
 				exist = true
 				break
 			}

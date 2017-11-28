@@ -18,37 +18,35 @@ func TestUnmarshal(t *testing.T) {
 			args:    append([]byte{0x0, 0x0, 5, 0x0, 0, 0x0, 5}, []byte(`name1value`)...),
 			wantErr: false,
 			want: &Message{
-				Name:    []byte("name1"),
+				Name:    "name1",
 				Payload: []byte("value"),
-				Route:   []byte{},
 			},
 		}, {
 			name:    "Simple message with no value",
 			args:    append([]byte{0x0, 0x0, 5, 0x0, 0, 0x0, 0}, []byte(`name1`)...),
 			wantErr: false,
 			want: &Message{
-				Name:    []byte("name1"),
+				Name:    "name1",
 				Payload: []byte{},
-				Route:   []byte{},
 			},
 		}, {
-			name:    "Simple message with no name",
-			args:    append([]byte{0x0, 0x0, 0, 0x0, 0, 0x0, 6}, []byte(`value1`)...),
+			name:    "Simple message with no name and route",
+			args:    append([]byte{0x0, 0x0, 0, 0x0, 3, 0x0, 6}, []byte(`RrrValue1`)...),
 			wantErr: false,
 			want: &Message{
-				Name:    []byte(""),
-				Payload: []byte("value1"),
-				Route:   []byte{},
+				Name:    "",
+				Payload: []byte("Value1"),
+				Route:   "Rrr",
 			},
 		}, {
-			name:    "Simple message with some action",
-			args:    append([]byte{0x1, 0x0, 0, 0x0, 0, 0x0, 6}, []byte(`value1`)...),
+			name:    "Simple message with some code and route",
+			args:    append([]byte{0x1, 0x0, 0, 0x0, 5, 0x0, 6}, []byte(`RouteValue1`)...),
 			wantErr: false,
 			want: &Message{
 				Code:    1,
-				Name:    []byte(""),
-				Payload: []byte("value1"),
-				Route:   []byte{},
+				Name:    "",
+				Payload: []byte("Value1"),
+				Route:   "Route",
 			},
 		},
 	}
@@ -70,9 +68,9 @@ func TestUnmarshal(t *testing.T) {
 func TestMessage_Marshal(t *testing.T) {
 	type fields struct {
 		Action byte
-		Name   []byte
+		Name   string
 		Value  []byte
-		Route  []byte
+		Route  string
 	}
 	tests := []struct {
 		name    string
@@ -85,27 +83,24 @@ func TestMessage_Marshal(t *testing.T) {
 			want:    append([]byte{0x0, 0x0, 5, 0x0, 0, 0x0, 5}, []byte(`name1value`)...),
 			wantErr: false,
 			fields: fields{
-				Name:  []byte("name1"),
+				Name:  "name1",
 				Value: []byte("value"),
-				Route: []byte{},
 			},
 		}, {
 			name:    "Simple message with no value",
 			want:    append([]byte{0x0, 0x0, 5, 0x0, 0, 0x0, 0}, []byte(`name1`)...),
 			wantErr: false,
 			fields: fields{
-				Name:  []byte("name1"),
+				Name:  "name1",
 				Value: []byte{},
-				Route: []byte{},
 			},
 		}, {
 			name:    "Simple message with single char name",
 			want:    append([]byte{0x0, 0x0, 1, 0x0, 0, 0x0, 6}, []byte(`nvalue1`)...),
 			wantErr: false,
 			fields: fields{
-				Name:  []byte("n"),
+				Name:  "n",
 				Value: []byte("value1"),
-				Route: []byte{},
 			},
 		}, {
 			name:    "Simple message with single char name and some action",
@@ -113,9 +108,8 @@ func TestMessage_Marshal(t *testing.T) {
 			wantErr: false,
 			fields: fields{
 				Action: 1,
-				Name:   []byte("n"),
+				Name:   "n",
 				Value:  []byte("value1"),
-				Route:  []byte{},
 			},
 		},
 	}

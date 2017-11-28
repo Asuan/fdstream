@@ -9,7 +9,7 @@ import (
 
 var (
 	ErrTimeout       = errors.New("Timeout on waiting message")
-	ErrMessageMarker = &Message{Code: 255}
+	ErrMessageMarker = &Message{Code: erTimeoutCode}
 )
 
 type ClientSyncReader interface {
@@ -145,12 +145,13 @@ func (c *SyncronizedSingleToneClient) Write(m *Message) error {
 }
 
 //WriteNamed asyncly message to destination
-func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name string, m Marshaller) error {
+func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, m Marshaller) error {
 	if b, err := m.Marshal(); err == nil {
 		return c.Write(
 			&Message{
 				Code:    code,
-				Name:    []byte(name),
+				Name:    name,
+				Route:   route,
 				Payload: b,
 			})
 	} else {
@@ -178,7 +179,7 @@ func (c *SyncronizedSingleToneClient) Read(name string) (*Message, error) {
 	c.returnerMessageQ <- getter
 	mes := <-getter.responce
 	mrPool.Put(getter)
-	if mes.Code != 255 {
+	if mes.Code < 200 {
 		return mes, nil
 	}
 

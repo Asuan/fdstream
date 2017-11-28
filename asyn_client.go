@@ -15,7 +15,7 @@ var (
 
 type AsyncWriter interface {
 	Write(*Message) error
-	WriteNamed(byte, string, Marshaller) error
+	WriteNamed(byte, string, string, Marshaller) error
 }
 
 type Marshaller interface {
@@ -29,8 +29,8 @@ type AsyncHandler interface {
 }
 
 type AsyncClient struct {
-	Destination    io.WriteCloser
-	Source         io.ReadCloser
+	OutputStream   io.WriteCloser
+	InputStream    io.ReadCloser
 	toSendMessageQ chan *Message //Queue to send
 	toReadMessageQ chan *Message //Queue to return back
 	killer         sync.Once
@@ -41,8 +41,8 @@ type AsyncClient struct {
 //NewAsyncHandler create async handler
 func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler, error) {
 	c := &AsyncClient{
-		Destination:    outcome,
-		Source:         income,
+		OutputStream:   outcome,
+		InputStream:    income,
 		toSendMessageQ: make(chan *Message, DefaultQSize),
 		toReadMessageQ: make(chan *Message, DefaultQSize),
 		kill:           make(chan bool),
@@ -50,62 +50,68 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 	c.alive.Store(true)
 
 	//Read message by message
-	workerReader := func(c *AsyncClient) {
+	workerReader := func(c *AsyncClient, toReadMessage chan<- *Message) {
 		var (
-			err                    error
-			n                      int
-			lenN, lenR, lenB, lenP int
-			cursor                 int
+			err        error
+			n          int
+			lenB       int //full length of body without header
+			lenR, lenP uint16
+			cursor     uint16
+			code       byte
+			eof        bool
 		)
 		header := make([]byte, messageHeaderSize, messageHeaderSize)
 		messageBody := make([]byte, MaxMessageSize, MaxMessageSize)
-		for {
-			n, err = c.Source.Read(header)
-			if err != nil { //io.EOF or ect communication error
-				c.shutdown()
-				return
+		for !eof {
+			n, err = c.InputStream.Read(header)
+			if err != nil {
+				break
 			}
 			if n == 0 { //Skip empty read
 				continue
 			}
 
 			if n != messageHeaderSize { //Wrong message header read in broken state
-				c.shutdown()
-				return
+				break
 			}
 			//TODO optimize reading
-			m := newMessage(UnmarshalHeader(header))
-			messageBody = messageBody[:m.Len()-messageHeaderSize]
-			lenN, lenR, lenP = len(m.Name), len(m.Route), len(m.Payload)
-			if lenB, err = c.Source.Read(messageBody); lenB == len(messageBody) && err == nil {
-				cursor = lenN
-				if lenN > 0 {
-					copy(m.Name, messageBody[0:cursor])
+			code, cursor, lenR, lenP = UnmarshalHeader(header)
+			m := newMessage(code, lenP)
+			messageBody = messageBody[:(cursor + lenR + lenP)]
+
+			lenB, err = c.InputStream.Read(messageBody)
+			if err != nil { //try read message it EOF appear
+				if err != io.EOF || lenB != len(messageBody) {
+					break
 				}
-				if lenR > 0 {
-					copy(m.Route, messageBody[cursor:cursor+lenR])
-					cursor += lenR
-				}
-				if lenP > 0 {
-					copy(m.Payload, messageBody[cursor:cursor+lenP])
-				}
-			} else {
-				c.shutdown()
-				return
+				eof = true
 			}
-			c.toReadMessageQ <- m
+
+			if cursor > 0 {
+				m.Name = string(messageBody[0:cursor])
+			}
+			if lenR > 0 {
+				m.Route = string(messageBody[cursor : cursor+lenR])
+				cursor += lenR
+			}
+			if lenP > 0 {
+				copy(m.Payload, messageBody[cursor:cursor+lenP])
+			}
+
+			toReadMessage <- m
 		}
+		c.shutdown()
 	}
 
 	//Write message by message
-	workerWriter := func(c *AsyncClient) {
+	workerWriter := func(c *AsyncClient, toSendMessages <-chan *Message) {
 		for {
 			select {
 			case <-c.kill:
 				return
 			case m := <-c.toSendMessageQ:
 				if bytes, err := m.Marshal(); err == nil {
-					if _, err := c.Destination.Write(bytes); err != nil {
+					if _, err := c.OutputStream.Write(bytes); err != nil {
 						c.shutdown()
 						return
 					}
@@ -115,8 +121,8 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 		}
 	}
 
-	go workerReader(c)
-	go workerWriter(c)
+	go workerReader(c, c.toReadMessageQ)
+	go workerWriter(c, c.toSendMessageQ)
 	return c, nil
 }
 
@@ -129,13 +135,14 @@ func (c *AsyncClient) Write(m *Message) error {
 	return ErrNilMessage
 }
 
-func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaller) (err error) {
+func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
 		return c.Write(
 			&Message{
 				Code:    code,
-				Name:    []byte(name), //TODO unsafe byte read
+				Name:    name,
+				Route:   route,
 				Payload: b,
 			})
 	}
@@ -151,9 +158,9 @@ func (c *AsyncClient) Read() *Message {
 func (c *AsyncClient) shutdown() {
 	//DO not close chans need grace safe inprogress messages
 	c.killer.Do(func() {
-		c.Source.Close()      //It will stop read worker
-		c.Destination.Close() //It will fire error on writer writing message
-		close(c.kill)         //It should stop writer
+		c.InputStream.Close()  //It will stop read worker
+		c.OutputStream.Close() //It will fire error on writer writing message
+		close(c.kill)          //It should stop writer
 		//TODO save unprocessed data
 		//TODO kill instance to clean data in q
 
