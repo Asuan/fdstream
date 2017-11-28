@@ -83,8 +83,10 @@ func Unmarshal(b []byte) (*Message, error) {
 
 	code, cursor, routeLen, payloadLen = UnmarshalHeader(b)
 	m = &Message{
-		Code: code,
+		Code:    code,
+		Payload: make([]byte, payloadLen, payloadLen),
 	}
+
 	if len(b) != int(messageHeaderSize+cursor+routeLen+payloadLen) {
 		return nil, ErrBinaryLength
 	}
@@ -101,7 +103,7 @@ func Unmarshal(b []byte) (*Message, error) {
 	}
 
 	if payloadLen > 0 {
-		m.Payload = b[cursor : cursor+payloadLen]
+		copy(m.Payload, b[cursor:cursor+payloadLen])
 	}
 	return m, nil
 
