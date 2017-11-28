@@ -88,7 +88,7 @@ func main() {
 		conn.SetKeepAlive(true)
 		//Exmaple handlers for connections
 		//go HandleTCPWithoutRouting(conn, i)
-		go HandlTCPWRouting(conn, i)
+		go HandlTCPWitRouting(conn, i)
 		i++
 	}
 
@@ -96,8 +96,8 @@ func main() {
 
 }
 
-//HandleTCP handle income messages with routings to separate chans
-func HandlTCPWRouting(conn *net.TCPConn, instanceNum int) error {
+//HandlTCPWitRouting handle income messages with routings to separate chans
+func HandlTCPWitRouting(conn *net.TCPConn, instanceNum int) error {
 	defer conn.Close()
 	logger.Printf("Handle connection: %s", conn.RemoteAddr().String())
 	cl, err := fdstream.NewAsyncHandler(conn, conn)
@@ -118,12 +118,13 @@ func HandlTCPWRouting(conn *net.TCPConn, instanceNum int) error {
 	r.AddRouting("1", in2, out2)
 	r.Start()
 	var (
-		i       int
-		message *fdstream.Message
+		i          int
+		message    *fdstream.Message
+		backPaylod []byte
 	)
 	for cl.IsAlive() {
 		i++
-		backPaylod := []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
+		backPaylod = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
 		select {
 		case message = <-in1:
 			logger.Printf("Get message router 1 message: %s", message.Name)
@@ -156,30 +157,42 @@ func HandleTCPWithoutRouting(conn *net.TCPConn, instanceNum int) error {
 	defer conn.Close()
 
 	logger.Printf("Handle connection: %s", conn.RemoteAddr().String())
-	cl, err := fdstream.NewAsyncHandler(conn, conn)
+
+	var (
+		i   int
+		err error
+		wg  sync.WaitGroup
+		cl  fdstream.AsyncHandler
+	)
+	cl, err = fdstream.NewAsyncHandler(conn, conn)
 	if err != nil {
 		return err
 	}
 
-	var (
-		i int
-	)
-	for cl.IsAlive() {
-		i++
+	worker := func() {
+		var (
+			message    *fdstream.Message
+			backPaylod []byte
+		)
+		for cl.IsAlive() {
+			i++
+			backPaylod = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
+			message = cl.Read()
+			logger.Printf("Get message %s", message.Name)
 
-		message := cl.Read()
-		logger.Printf("Get message %s", message.Name)
-		if err != nil {
-			logger.Printf("Error respoonce: %v\n", err)
+			cl.Write(&fdstream.Message{
+				Code:    0,
+				Name:    message.Name,
+				Payload: backPaylod,
+			})
 		}
-
-		cl.Write(&fdstream.Message{
-			Code:    0,
-			Name:    message.Name,
-			Payload: []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i)),
-		})
-
+		wg.Done()
 	}
+
+	wg.Add(2)
+	go worker()
+	go worker()
+	wg.Wait()
 
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	return nil
