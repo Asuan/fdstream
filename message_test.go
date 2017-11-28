@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestUnmarshal(t *testing.T) {
+func Test_unmarshal(t *testing.T) {
 
 	tests := []struct {
 		name    string
@@ -27,7 +27,7 @@ func TestUnmarshal(t *testing.T) {
 			wantErr: false,
 			want: &Message{
 				Name:    "name1",
-				Payload: []byte{},
+				Payload: nil,
 			},
 		}, {
 			name:    "Simple message with no name and route",
@@ -64,8 +64,7 @@ func TestUnmarshal(t *testing.T) {
 	}
 
 }
-
-func TestMessage_Marshal(t *testing.T) {
+func Test_marshal(t *testing.T) {
 	type fields struct {
 		Action byte
 		Name   string
@@ -133,4 +132,64 @@ func TestMessage_Marshal(t *testing.T) {
 	}
 }
 
-//TODO bench
+func testBenchMarshal(length int, b *testing.B) {
+	b.StopTimer()
+	payload := make([]byte, length, length)
+
+	benchmarks := []struct {
+		name string
+
+		message *Message
+	}{
+		{"name-10", &Message{string(make([]byte, 10, 10)), "", 0, payload}},
+		{"name-20", &Message{string(make([]byte, 20, 20)), "", 0, payload}},
+		{"name-50", &Message{string(make([]byte, 50, 50)), "", 0, payload}},
+		{"name-5", &Message{string(make([]byte, 5, 5)), "", 0, payload}},
+	}
+	b.StartTimer()
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				bm.message.Marshal()
+			}
+		})
+	}
+}
+
+func testBenchUnmarshal(length int, b *testing.B) {
+	b.StopTimer()
+	payload := make([]byte, length, length)
+
+	stubMessage := func(l int) []byte {
+		z, _ := (&Message{string(make([]byte, l, l)), "", 0, payload}).Marshal()
+		return z
+	}
+	benchmarks := []struct {
+		name string
+
+		message []byte
+	}{
+		{"name-10", stubMessage(10)},
+		{"name-20", stubMessage(20)},
+		{"name-50", stubMessage(50)},
+		{"name-5", stubMessage(5)},
+	}
+	b.StartTimer()
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				Unmarshal(bm.message)
+			}
+		})
+	}
+}
+
+func Benchmark_Marshal2(b *testing.B)    { testBenchMarshal(2, b) }
+func Benchmark_Marshal10(b *testing.B)   { testBenchMarshal(10, b) }
+func Benchmark_Marshal100(b *testing.B)  { testBenchMarshal(100, b) }
+func Benchmark_Marshal1000(b *testing.B) { testBenchMarshal(1000, b) }
+
+func Benchmark_Unmarshal2(b *testing.B)    { testBenchUnmarshal(2, b) }
+func Benchmark_Unmarshal10(b *testing.B)   { testBenchUnmarshal(10, b) }
+func Benchmark_Unmarshal100(b *testing.B)  { testBenchUnmarshal(100, b) }
+func Benchmark_Unmarshal1000(b *testing.B) { testBenchUnmarshal(1000, b) }

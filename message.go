@@ -76,28 +76,32 @@ func Unmarshal(b []byte) (*Message, error) {
 		return nil, ErrTooShortMessage
 	}
 	var (
-		code                          byte
-		m                             *Message
-		nameLen, routeLen, payloadLen uint16
+		code                         byte
+		m                            *Message
+		cursor, routeLen, payloadLen uint16
 	)
 
-	code, nameLen, routeLen, payloadLen = UnmarshalHeader(b)
-	m = newMessage(code, payloadLen)
-	if len(b) != int(messageHeaderSize+nameLen+routeLen+payloadLen) {
+	code, cursor, routeLen, payloadLen = UnmarshalHeader(b)
+	m = &Message{
+		Code: code,
+	}
+	if len(b) != int(messageHeaderSize+cursor+routeLen+payloadLen) {
 		return nil, ErrBinaryLength
 	}
 
 	//TODO optimize
-	if nameLen > 0 {
-		m.Name = string(b[messageHeaderSize : messageHeaderSize+int(nameLen)])
+	if cursor > 0 {
+		m.Name = string(b[messageHeaderSize : messageHeaderSize+cursor])
 	}
+	cursor += messageHeaderSize
 
 	if routeLen > 0 {
-		m.Route = string(b[messageHeaderSize+int(nameLen) : messageHeaderSize+int(nameLen)+int(routeLen)])
+		m.Route = string(b[cursor : cursor+routeLen])
+		cursor += routeLen
 	}
 
 	if payloadLen > 0 {
-		copy(m.Payload, b[messageHeaderSize+int(nameLen)+int(routeLen):messageHeaderSize+int(nameLen)+int(routeLen)+int(payloadLen)])
+		m.Payload = b[cursor : cursor+payloadLen]
 	}
 	return m, nil
 
@@ -110,14 +114,6 @@ func UnmarshalHeader(b []byte) (code byte, nameLen, routeLen, payloadLen uint16)
 	routeLen = binary.BigEndian.Uint16(b[3:5])
 	payloadLen = binary.BigEndian.Uint16(b[5:7])
 	return
-}
-
-func newMessage(acion byte, payloadLen uint16) *Message {
-	return &Message{
-		Code: acion,
-
-		Payload: make([]byte, int(payloadLen), int(payloadLen)),
-	}
 }
 
 //Len calcualte current length of message in bytes

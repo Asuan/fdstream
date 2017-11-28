@@ -76,7 +76,10 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 			}
 			//TODO optimize reading
 			code, cursor, lenR, lenP = UnmarshalHeader(header)
-			m := newMessage(code, lenP)
+			m := &Message{
+				Code:    code,
+				Payload: make([]byte, lenP, lenP),
+			}
 			messageBody = messageBody[:(cursor + lenR + lenP)]
 
 			lenB, err = c.InputStream.Read(messageBody)
