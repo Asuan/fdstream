@@ -30,6 +30,7 @@ var (
 	cpuprofile    string
 	totalBytes    *int64
 	totalMessages *int64
+	totalWait     *int64
 )
 
 //Initialize flags
@@ -37,9 +38,10 @@ func Initialize() {
 	var (
 		err error
 	)
-	var a, b int64
+	var a, b, c int64
 	totalBytes = &a
 	totalMessages = &b
+	totalWait = &c
 	flag.BoolVar(&ctx.isSync, "sync", true, "mode of client")
 	flag.StringVar(&ctx.server, "server", "0.0.0.0:1900", "address of server")
 	//Profile
@@ -89,8 +91,9 @@ func main() {
 	}
 	wg.Wait()
 	duration := time.Now().Sub(t)
-	logger.Printf("Rate: %f", float64(*totalBytes)/duration.Seconds())
+	logger.Printf("Data rate: %f", float64(*totalBytes)/duration.Seconds())
 	logger.Printf("Hits: %f", float64(*totalMessages)/duration.Seconds())
+	logger.Printf("Average wait: %v", time.Duration(*totalWait / *totalMessages))
 	logger.Printf("Stop all")
 
 }
@@ -125,9 +128,11 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		}
 		delta := time.Now().Sub(start)
 		logger.Printf("Wait responce during %v client %d %dmessage", delta, instanceNum, i)
+		atomic.AddInt64(totalWait, int64(delta))
 	}
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSend)
 	atomic.AddInt64(totalBytes, int64(totalSend))
 	atomic.AddInt64(totalMessages, int64(i))
+
 }
