@@ -60,7 +60,7 @@ func Initialize() {
 func main() {
 	Initialize()
 
-	//Profile
+	//Optional profiling
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
@@ -71,31 +71,36 @@ func main() {
 		}
 		defer pprof.StopCPUProfile()
 	}
-	t := time.Now()
+	timeStart := time.Now()
 	conn, err := net.DialTCP("tcp", nil, ctx.tcpAddr)
 	if err != nil {
 		logger.Printf("Could not connect to address: %s error: %v", ctx.tcpAddr.String(), err)
 	}
 	defer conn.Close()
+	//Tune tcp connection
 	conn.SetReadBuffer(fdstream.MaxMessageSize * 40)
 	conn.SetWriteBuffer(fdstream.MaxMessageSize * 40)
 	conn.SetKeepAlive(true)
+
+	//Create new communication client with timeout for messages inside stream 2 second
 	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(2*time.Minute))
 	if err != nil {
 		logger.Printf("Could not create instance %v", err)
 	}
+	//Create some async client for communication with server
 	wg.Add(200)
 	for i := 0; i < 200; i++ {
 		logger.Printf("Start client %d", i)
 		go HandlerClient(cl, i)
 	}
 	wg.Wait()
-	duration := time.Now().Sub(t)
+
+	//Some end statistic of communication
+	duration := time.Now().Sub(timeStart)
 	logger.Printf("Data rate: %f", float64(*totalBytes)/duration.Seconds())
 	logger.Printf("Hits: %f", float64(*totalMessages)/duration.Seconds())
 	logger.Printf("Average wait: %v", time.Duration(*totalWait / *totalMessages))
 	logger.Printf("Stop all")
-
 }
 
 //HandlerClient some test worker for communication
@@ -111,10 +116,11 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		i++
 		r := rand.Intn(100)
 		time.Sleep(time.Duration(r) * time.Millisecond)
-		name := fmt.Sprintf("Client%d-M%d", instanceNum, i)
+
+		//create message with unique name for sending data and waiting responce by specified name
 		message = &fdstream.Message{
-			Name:    name,
-			Route:   strconv.Itoa(i % 2),
+			Name:    fmt.Sprintf("Client%d-M%d", instanceNum, i),
+			Route:   strconv.Itoa(i % 2), //Simple route rounding
 			Payload: make([]byte, r*15, r*15),
 		}
 		totalSend += message.Len()

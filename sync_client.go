@@ -8,18 +8,16 @@ import (
 )
 
 var (
-	ErrTimeout       = errors.New("Timeout on waiting message")
-	ErrMessageMarker = &Message{Code: erTimeoutCode}
+	//ErrMessageTimeout indicate wait timeout appear
+	ErrMessageTimeout = &Message{Code: erTimeoutCode, Name: "Timeout on waiting message"}
+	//ErrMessageDuplicateName indicate sync client already wait message with same name
+	ErrMessageDuplicateName = &Message{Code: erDuplicateNameErrorCode, Name: "Message with same name already wait response"}
 )
-
-type ClientSyncReader interface {
-	Read(string) (*Message, error)
-	WriteAndReadResponce(*Message) (*Message, error)
-}
 
 type ClientSyncHander interface {
 	AsyncWriter
-	ClientSyncReader
+	Read(string) (*Message, error)
+	WriteAndReadResponce(*Message) (*Message, error)
 	IsAlive() bool
 }
 
@@ -40,40 +38,40 @@ var mrPool = sync.Pool{
 	},
 }
 
-//SyncronizedSingleToneClient single gorutine client for sync read write to Async client
-type SyncronizedSingleToneClient struct {
+//SyncClient single gorutine client for sync read write to Async client
+type SyncClient struct {
 	async *AsyncClient
 	//Sync additional fields
 	defaultTimeout time.Duration
 
-	returnerMessageQ chan *messageReciaver
-	unknowMessage    map[string]*messageWithTimeout
-	messageToReturn  map[string]*messageReciaver
+	awaitMessageQ   chan *messageReciaver
+	unknowMessage   map[string]*messageWithTimeout
+	messageToReturn map[string]*messageReciaver
 }
 
-//NewTCPSyncClientHandler create sync handler it have sync read from stream
+//NewSyncClient create sync handler it have sync read from stream
 func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Duration) (ClientSyncHander, error) {
 	a, _ := NewAsyncHandler(outcome, income)
 	asyncClient := a.(*AsyncClient)
-	c := &SyncronizedSingleToneClient{
-		unknowMessage:    make(map[string]*messageWithTimeout, DefaultQSize),
-		messageToReturn:  make(map[string]*messageReciaver, DefaultQSize),
-		returnerMessageQ: make(chan *messageReciaver, DefaultQSize),
+	c := &SyncClient{
+		unknowMessage:   make(map[string]*messageWithTimeout, defaultQSize),
+		messageToReturn: make(map[string]*messageReciaver, defaultQSize),
+		awaitMessageQ:   make(chan *messageReciaver, defaultQSize),
 
 		defaultTimeout: timeout,
 		async:          asyncClient,
 	}
 
 	//Return specefied message
-	returnWorker := func(c *SyncronizedSingleToneClient) {
-		tiker := time.NewTicker(c.defaultTimeout / 3)
-		returnTiker := time.NewTicker(200 * time.Millisecond)
-		defer tiker.Stop()
-		defer returnTiker.Stop()
+	returnWorker := func(c *SyncClient) {
+		janitorTiker := time.NewTicker(c.defaultTimeout / 3)
+		responceTiker := time.NewTicker(200 * time.Millisecond)
+		defer janitorTiker.Stop()
+		defer responceTiker.Stop()
 
 		for asyncClient.IsAlive() {
 			select {
-			case <-tiker.C: //cleanup old messages
+			case <-janitorTiker.C: //cleanup old messages and responce waiters
 				now := time.Now().UnixNano()
 				for n, v := range c.unknowMessage {
 					if v.timeout < now {
@@ -82,22 +80,26 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 				}
 				for n, v := range c.messageToReturn { //fire timeout
 					if v.timeout < now {
-						v.responce <- ErrMessageMarker
+						v.responce <- ErrMessageTimeout
 						delete(c.messageToReturn, n)
 					}
 				}
 
-			case r := <-c.returnerMessageQ: //add message to wait responce from back side
+			case r := <-c.awaitMessageQ: //add message to wait responce from back side
 				name := r.name
 				if m, ok := c.unknowMessage[name]; ok {
 					r.responce <- m.message
 					delete(c.unknowMessage, name)
-				} else {
-					r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
-					c.messageToReturn[name] = r
+					continue
 				}
+				if _, ok := c.messageToReturn[name]; ok {
+					r.responce <- ErrMessageDuplicateName
+					continue
+				}
+				r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
+				c.messageToReturn[name] = r
 
-			case <-returnTiker.C: //Return responce messages
+			case <-responceTiker.C: //Check messages and return it
 				for k, v := range c.messageToReturn {
 					if m, ok := c.unknowMessage[k]; ok {
 						v.responce <- m.message
@@ -109,25 +111,26 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 					return
 				}
 			case m := <-asyncClient.toReadMessageQ: //read income messages
-				name := string(m.Name)
+				name := m.Name
+
 				if r, ok := c.messageToReturn[name]; ok {
 					r.responce <- m
 					delete(c.messageToReturn, name)
-				} else {
-					c.unknowMessage[string(m.Name)] = &messageWithTimeout{
-						message: m,
-						timeout: time.Now().Add(c.defaultTimeout).UnixNano(),
-					}
+					continue
+				}
+				c.unknowMessage[name] = &messageWithTimeout{
+					message: m,
+					timeout: time.Now().Add(c.defaultTimeout).UnixNano(),
 				}
 			}
 		}
 
 		for n, v := range c.messageToReturn { //TODO fire not timeout but another
-			v.responce <- ErrMessageMarker
+			v.responce <- ErrMessageTimeout
 			delete(c.messageToReturn, n)
 		}
-		for r := range c.returnerMessageQ {
-			r.responce <- ErrMessageMarker
+		for r := range c.awaitMessageQ {
+			r.responce <- ErrMessageTimeout
 		}
 
 	}
@@ -136,16 +139,16 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	return c, nil
 }
 
-//Write asyncly message to destination
-func (c *SyncronizedSingleToneClient) Write(m *Message) error {
+//Write message to destination with async way
+func (c *SyncClient) Write(m *Message) error {
 	if m != nil {
 		c.async.toSendMessageQ <- m
 	}
-	return ErrNilMessage
+	return errNilMessage
 }
 
-//WriteNamed asyncly message to destination
-func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
+//WriteNamed write object to destination with async way
+func (c *SyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
 	var b []byte
 
 	if b, err = m.Marshal(); err == nil {
@@ -160,8 +163,8 @@ func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, 
 	return err
 }
 
-//WriteNamed asyncly message to destination
-func (c *SyncronizedSingleToneClient) WriteBytes(code byte, name, route string, payload []byte) error {
+//WriteBytes bytes to destination with async way
+func (c *SyncClient) WriteBytes(code byte, name, route string, payload []byte) error {
 	return c.Write(
 		&Message{
 			Code:    code,
@@ -172,32 +175,31 @@ func (c *SyncronizedSingleToneClient) WriteBytes(code byte, name, route string, 
 }
 
 //WriteAndReadResponce will write message and expect responce or error
-func (c *SyncronizedSingleToneClient) WriteAndReadResponce(m *Message) (*Message, error) {
+func (c *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if m == nil {
-		return nil, ErrNilMessage
+		return nil, errNilMessage
 	}
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
 	c.async.toSendMessageQ <- m
-	return c.Read(string(m.Name))
+	return c.Read(m.Name)
 }
 
-//Read read message by specified name
-func (c *SyncronizedSingleToneClient) Read(name string) (*Message, error) {
+//Read is wait and read message by specified name
+func (c *SyncClient) Read(name string) (*Message, error) {
 	getter := mrPool.Get().(*messageReciaver)
 	getter.name = name
-	c.returnerMessageQ <- getter
+	c.awaitMessageQ <- getter
 	mes := <-getter.responce
 	mrPool.Put(getter)
 	if mes.Code < 200 {
 		return mes, nil
 	}
-
-	return nil, ErrTimeout
-
+	return nil, errors.New(mes.Name)
 }
 
-func (c *SyncronizedSingleToneClient) IsAlive() bool {
+//IsAlive indicate is communication is alive or dead
+func (c *SyncClient) IsAlive() bool {
 	return c.async.IsAlive()
 }

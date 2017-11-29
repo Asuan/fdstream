@@ -49,7 +49,7 @@ func TestSyncWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
-	(handler.(*SyncronizedSingleToneClient)).async.shutdown() //Stop loops
+	(handler.(*SyncClient)).async.shutdown() //Stop loops
 }
 
 func TestSyncRead(t *testing.T) {
@@ -73,6 +73,6 @@ func TestSyncRead(t *testing.T) {
 	as.Equal("route", m.Route)
 	as.Equal([]byte("anry"), m.Payload)
 
-	(handler.(*SyncronizedSingleToneClient)).async.shutdown() //Stop loops
+	(handler.(*SyncClient)).async.shutdown() //Stop loops
 
 }

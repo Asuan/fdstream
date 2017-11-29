@@ -86,8 +86,11 @@ func main() {
 		conn.SetReadBuffer(fdstream.MaxMessageSize * 200)
 		conn.SetWriteBuffer(fdstream.MaxMessageSize * 200)
 		conn.SetKeepAlive(true)
-		//Exmaple handlers for connections
+
+		//Exmaple handlers for connections without routing
 		//go HandleTCPWithoutRouting(conn, i)
+
+		//Example how to handle connection with routing messages
 		go HandlTCPWitRouting(conn, i)
 		i++
 	}
@@ -116,7 +119,7 @@ func HandlTCPWitRouting(conn *net.TCPConn, instanceNum int) error {
 	r.AddRouting("0", in1, out1)
 	in2, out2 := make(chan *fdstream.Message, 100), make(chan *fdstream.Message, 100)
 	r.AddRouting("1", in2, out2)
-	r.Start()
+	r.Start() //It is important to start routings
 	var (
 		i          int
 		message    *fdstream.Message
@@ -141,11 +144,6 @@ func HandlTCPWitRouting(conn *net.TCPConn, instanceNum int) error {
 				Payload: backPaylod,
 			}
 		}
-
-		if err != nil {
-			logger.Printf("Error respoonce: %v\n", err)
-		}
-
 	}
 
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 )
 
+//Router is routing message by const route names
 type Router struct {
 	name     string
 	inputQ   <-chan *Message

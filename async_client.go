@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 )
 
-const DefaultQSize = 200
+const defaultQSize = 200
 
 var (
-	ErrNilMessage = errors.New("Nil message")
+	errNilMessage = errors.New("Nil message")
 )
 
 type AsyncWriter interface {
@@ -19,6 +19,7 @@ type AsyncWriter interface {
 	WriteBytes(byte, string, string, []byte) error
 }
 
+//Marshaller interface to pass custom object it is same with many *Marshal interfaces
 type Marshaller interface {
 	Marshal() ([]byte, error)
 }
@@ -44,8 +45,8 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 	c := &AsyncClient{
 		OutputStream:   outcome,
 		InputStream:    income,
-		toSendMessageQ: make(chan *Message, DefaultQSize),
-		toReadMessageQ: make(chan *Message, DefaultQSize),
+		toSendMessageQ: make(chan *Message, defaultQSize),
+		toReadMessageQ: make(chan *Message, defaultQSize),
 		kill:           make(chan bool),
 	}
 	c.alive.Store(true)
@@ -53,29 +54,30 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 	//Read message by message from input reader
 	workerReader := func(c *AsyncClient, outcome chan<- *Message) {
 		var (
-			err        error
-			n          int
-			lenB       int //full length of body without header
-			lenR, lenP uint16
-			cursor     uint16
-			code       byte
-			eof        bool
+			err         error
+			n           int
+			lenB        int //full length of body without header
+			lenR, lenP  uint16
+			cursor      uint16
+			code        byte
+			eof         bool
+			header      = make([]byte, messageHeaderSize, messageHeaderSize)
+			messageBody = make([]byte, MaxMessageSize, MaxMessageSize)
 		)
-		header := make([]byte, messageHeaderSize, messageHeaderSize)
-		messageBody := make([]byte, MaxMessageSize, MaxMessageSize)
+
 		for !eof {
 			n, err = c.InputStream.Read(header)
 			if err != nil {
-				break
+				break //If we get error so looks like no way to continue
 			}
 			if n == 0 { //Skip empty read
 				continue
 			}
 
-			if n != messageHeaderSize { //Wrong message header read in broken state
+			if n != messageHeaderSize { //Wrong message header read looks broken state
 				break
 			}
-			//TODO optimize reading
+			//TODO optimize reading and use default unmarshal func
 			code, cursor, lenR, lenP = UnmarshalHeader(header)
 			m := &Message{
 				Code:    code,
@@ -84,7 +86,8 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 			messageBody = messageBody[:(cursor + lenR + lenP)]
 
 			lenB, err = c.InputStream.Read(messageBody)
-			if err != nil { //try read message it EOF appear
+			if err != nil {
+				//try read last message it EOF appear
 				if err != io.EOF || lenB != len(messageBody) {
 					break
 				}
@@ -109,20 +112,25 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 
 	//Write message by message to outut reader from chan
 	workerWriter := func(c *AsyncClient, income <-chan *Message) {
+		var (
+			bytes []byte
+			err   error
+			m     *Message
+		)
+	mainLoop:
 		for {
 			select {
 			case <-c.kill:
-				return
-			case m := <-income:
-				if bytes, err := m.Marshal(); err == nil {
-					if _, err := c.OutputStream.Write(bytes); err != nil {
-						c.shutdown()
-						return
+				break mainLoop
+			case m = <-income:
+				if bytes, err = m.Marshal(); err == nil {
+					if _, err = c.OutputStream.Write(bytes); err != nil {
+						break mainLoop
 					}
 				}
 			}
-
 		}
+		c.shutdown()
 	}
 
 	go workerReader(c, c.toReadMessageQ)
@@ -137,7 +145,7 @@ func (c *AsyncClient) Write(m *Message) error {
 		c.toSendMessageQ <- m
 		return nil
 	}
-	return ErrNilMessage
+	return errNilMessage
 }
 
 //WriteNamed will write marshalable object to destination

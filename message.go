@@ -11,25 +11,35 @@ import (
 
 //Max size of message
 const (
-	MaxMessageSize          = 1e5
-	messageHeaderSize       = 7
-	erMissRoutingCode  byte = 254
-	erGeneralErrorCode byte = 255
-	erTimeoutCode      byte = 253
+	MaxMessageSize                = 1e5
+	messageHeaderSize             = 7
+	erMissRoutingCode        byte = 254
+	erGeneralErrorCode       byte = 255
+	erTimeoutCode            byte = 253
+	erDuplicateNameErrorCode byte = 252
 )
 
 var (
-	ErrEmptyName       = errors.New("Empty name of message")
+	//ErrEmptyName is specifyc error used in name is mandatary value (Sync client)
+	ErrEmptyName = errors.New("Empty name of message")
+	//ErrTooShortMessage mean incomplete header
 	ErrTooShortMessage = errors.New("Too short message")
-	ErrBinaryLength    = errors.New("Incorrect binary length")
+	//ErrBinaryLength mean rest of bytes have incorrect length according header
+	ErrBinaryLength = errors.New("Incorrect binary length")
 )
 
+//Message is a communication message for async and sync client
 type Message struct {
-	Name  string
+	//Name of message is some message ID,
+	// it is optional for async communication
+	// but mandatary for sync communication to get correct respoce by name
+	Name string
+	//Route of message is optional value to be used by router
 	Route string
 	//Code is an a flag of somebody, fill free to use flag < 200
 	//code with value more than 200 mean some error or problem
-	Code    byte
+	Code byte
+	//Payload is a user data to be sended
 	Payload []byte
 }
 
@@ -69,12 +79,12 @@ func (m *Message) Marshal() ([]byte, error) {
 	return res, nil
 }
 
-//Unmarshal create message from specified byte array
+//Unmarshal create message from specified byte array or return error
 func Unmarshal(b []byte) (*Message, error) {
-
 	if len(b) < messageHeaderSize {
 		return nil, ErrTooShortMessage
 	}
+
 	var (
 		code                         byte
 		m                            *Message
@@ -84,14 +94,13 @@ func Unmarshal(b []byte) (*Message, error) {
 	code, cursor, routeLen, payloadLen = UnmarshalHeader(b)
 	m = &Message{
 		Code:    code,
-		Payload: make([]byte, payloadLen, payloadLen),
+		Payload: make([]byte, payloadLen, payloadLen), //This line slowdown Unmarshal by 2-3 times
 	}
 
 	if len(b) != int(messageHeaderSize+cursor+routeLen+payloadLen) {
 		return nil, ErrBinaryLength
 	}
 
-	//TODO optimize
 	if cursor > 0 {
 		m.Name = string(b[messageHeaderSize : messageHeaderSize+cursor])
 	}
