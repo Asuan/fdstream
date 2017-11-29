@@ -19,7 +19,7 @@ func TestSyncWrite(t *testing.T) {
 	testWriter := &TestWriteCloser{
 		m: map[int][]byte{},
 	}
-	handler, err := NewAsyncHandler(testWriter, readCloser)
+	handler, err := NewSyncClient(testWriter, readCloser, time.Duration(2*time.Second))
 	as.Nil(err)
 
 	testMessages := [10]*Message{}
@@ -49,5 +49,30 @@ func TestSyncWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
-	handler.(*AsyncClient).shutdown()
+	(handler.(*SyncronizedSingleToneClient)).async.shutdown() //Stop loops
+}
+
+func TestSyncRead(t *testing.T) {
+	as := assert.New(t)
+	data, _ := (&Message{"name", "route", byte(0), []byte("anry")}).Marshal()
+	readCloser := &TestReaderWaiter{
+		data: data,
+		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
+	}
+
+	testWriter := &TestWriteCloser{
+		m: map[int][]byte{},
+	}
+	handler, err := NewSyncClient(testWriter, readCloser, time.Duration(2*time.Second))
+	as.Nil(err)
+
+	m, err := handler.Read("name")
+	as.Nil(err)
+	as.Equal(byte(0), m.Code)
+	as.Equal("name", m.Name)
+	as.Equal("route", m.Route)
+	as.Equal([]byte("anry"), m.Payload)
+
+	(handler.(*SyncronizedSingleToneClient)).async.shutdown() //Stop loops
+
 }

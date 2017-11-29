@@ -145,8 +145,10 @@ func (c *SyncronizedSingleToneClient) Write(m *Message) error {
 }
 
 //WriteNamed asyncly message to destination
-func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, m Marshaller) error {
-	if b, err := m.Marshal(); err == nil {
+func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
+	var b []byte
+
+	if b, err = m.Marshal(); err == nil {
 		return c.Write(
 			&Message{
 				Code:    code,
@@ -154,10 +156,19 @@ func (c *SyncronizedSingleToneClient) WriteNamed(code byte, name, route string, 
 				Route:   route,
 				Payload: b,
 			})
-	} else {
-		return err
 	}
+	return err
+}
 
+//WriteNamed asyncly message to destination
+func (c *SyncronizedSingleToneClient) WriteBytes(code byte, name, route string, payload []byte) error {
+	return c.Write(
+		&Message{
+			Code:    code,
+			Name:    name,
+			Route:   route,
+			Payload: payload,
+		})
 }
 
 //WriteAndReadResponce will write message and expect responce or error

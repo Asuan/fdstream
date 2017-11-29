@@ -16,6 +16,7 @@ var (
 type AsyncWriter interface {
 	Write(*Message) error
 	WriteNamed(byte, string, string, Marshaller) error
+	WriteBytes(byte, string, string, []byte) error
 }
 
 type Marshaller interface {
@@ -49,8 +50,8 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 	}
 	c.alive.Store(true)
 
-	//Read message by message
-	workerReader := func(c *AsyncClient, toReadMessage chan<- *Message) {
+	//Read message by message from input reader
+	workerReader := func(c *AsyncClient, outcome chan<- *Message) {
 		var (
 			err        error
 			n          int
@@ -101,18 +102,18 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 				copy(m.Payload, messageBody[cursor:cursor+lenP])
 			}
 
-			toReadMessage <- m
+			outcome <- m
 		}
 		c.shutdown()
 	}
 
-	//Write message by message
-	workerWriter := func(c *AsyncClient, toSendMessages <-chan *Message) {
+	//Write message by message to outut reader from chan
+	workerWriter := func(c *AsyncClient, income <-chan *Message) {
 		for {
 			select {
 			case <-c.kill:
 				return
-			case m := <-c.toSendMessageQ:
+			case m := <-income:
 				if bytes, err := m.Marshal(); err == nil {
 					if _, err := c.OutputStream.Write(bytes); err != nil {
 						c.shutdown()
@@ -130,6 +131,7 @@ func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler
 }
 
 //Write will write message to destination
+//The function is thread safe
 func (c *AsyncClient) Write(m *Message) error {
 	if m != nil {
 		c.toSendMessageQ <- m
@@ -138,6 +140,8 @@ func (c *AsyncClient) Write(m *Message) error {
 	return ErrNilMessage
 }
 
+//WriteNamed will write marshalable object to destination
+//The function is thread safe
 func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
@@ -153,6 +157,20 @@ func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (e
 
 }
 
+//WriteBytes will write bytes to destination
+//The function is thread safe
+func (c *AsyncClient) WriteBytes(code byte, name, route string, payload []byte) (err error) {
+	return c.Write(
+		&Message{
+			Code:    code,
+			Name:    name,
+			Route:   route,
+			Payload: payload,
+		})
+}
+
+//Read message read message from internal chan
+//The function is thread safe
 func (c *AsyncClient) Read() *Message {
 	return <-c.toReadMessageQ
 }
@@ -171,6 +189,7 @@ func (c *AsyncClient) shutdown() {
 	c.alive.Store(false)
 }
 
+//IsAlive notify about state of async client
 func (c *AsyncClient) IsAlive() bool {
 	return c.alive.Load().(bool)
 }

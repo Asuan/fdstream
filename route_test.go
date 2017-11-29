@@ -14,6 +14,7 @@ func newRoute(as *assert.Assertions) *Router {
 	as.Nil(err, "Error on creating router")
 	return router
 }
+
 func TestRouter_AddRouting(t *testing.T) {
 	as := assert.New(t)
 	router := newRoute(as)

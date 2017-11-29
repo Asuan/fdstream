@@ -16,11 +16,25 @@ type TestWriteCloser struct {
 }
 
 type TestReaderWaiter struct {
-	d time.Duration
+	data []byte
+	i    int
+	d    time.Duration
 }
 
 func (t *TestReaderWaiter) Read(b []byte) (int, error) {
 	time.Sleep(t.d)
+	if t.data != nil {
+		begin := t.i
+
+		for ; (t.i-begin) < len(b) && t.i < len(t.data); t.i++ {
+			b[t.i-begin] = t.data[t.i]
+		}
+		total := t.i - begin
+		if t.i == len(t.data) {
+			t.i = 0
+		}
+		return total, nil
+	}
 	return 0, nil
 }
 
@@ -30,7 +44,7 @@ func (t *TestReaderWaiter) Close() error {
 
 func (t *TestWriteCloser) Write(v []byte) (int, error) {
 	t.counter++
-	//t.m[t.counter] = v
+
 	return ioutil.Discard.Write(v)
 }
 
@@ -78,5 +92,28 @@ func TestWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
+	handler.(*AsyncClient).shutdown()
+}
+
+func TestRead(t *testing.T) {
+	as := assert.New(t)
+	data, _ := (&Message{"name", "route", byte(0), []byte("anry")}).Marshal()
+	readCloser := &TestReaderWaiter{
+		data: data,
+		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
+	}
+
+	testWriter := &TestWriteCloser{
+		m: map[int][]byte{},
+	}
+	handler, err := NewAsyncHandler(testWriter, readCloser)
+	as.Nil(err)
+
+	m := handler.Read()
+	as.Equal(byte(0), m.Code)
+	as.Equal("name", m.Name)
+	as.Equal("route", m.Route)
+	as.Equal([]byte("anry"), m.Payload)
+
 	handler.(*AsyncClient).shutdown()
 }
