@@ -27,7 +27,7 @@ func Test_unmarshal(t *testing.T) {
 			wantErr: false,
 			want: &Message{
 				Name:    "name1",
-				Payload: nil,
+				Payload: []byte{},
 			},
 		}, {
 			name:    "Simple message with no name and route",

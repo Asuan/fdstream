@@ -44,7 +44,6 @@ func (t *TestReaderWaiter) Close() error {
 
 func (t *TestWriteCloser) Write(v []byte) (int, error) {
 	t.counter++
-
 	return ioutil.Discard.Write(v)
 }
 
