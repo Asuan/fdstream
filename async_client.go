@@ -31,17 +31,17 @@ type AsyncHandler interface {
 }
 
 type AsyncClient struct {
-	OutputStream   io.WriteCloser
+	OutputStream   io.Writer
 	InputStream    io.ReadCloser
-	toSendMessageQ chan *Message //Queue to send
-	toReadMessageQ chan *Message //Queue to return back
+	toSendMessageQ chan *Message //Queue to send to remote
+	toReadMessageQ chan *Message //Queue to to read message
 	killer         sync.Once
 	kill           chan bool
 	alive          atomic.Value
 }
 
 //NewAsyncHandler create async handler
-func NewAsyncHandler(outcome io.WriteCloser, income io.ReadCloser) (AsyncHandler, error) {
+func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, error) {
 	c := &AsyncClient{
 		OutputStream:   outcome,
 		InputStream:    income,
@@ -187,9 +187,8 @@ func (c *AsyncClient) Read() *Message {
 func (c *AsyncClient) shutdown() {
 	//DO not close chans need grace safe inprogress messages
 	c.killer.Do(func() {
-		c.InputStream.Close()  //It will stop read worker
-		c.OutputStream.Close() //It will fire error on writer writing message
-		close(c.kill)          //It should stop writer
+		close(c.kill)         //It should stop writer
+		c.InputStream.Close() //We should notify all 3d writes about trouble.
 		//TODO save unprocessed data
 		//TODO kill instance to clean data in q
 

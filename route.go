@@ -89,7 +89,7 @@ func NewRouter(name string, input <-chan *Message, output chan *Message) (*Route
 
 //NewRouterForClient create router for async communication client
 // name should be not empty
-// clint should not be empty
+// client should not be empty
 func NewRouterForClient(name string, client *AsyncClient) (*Router, error) {
 	if client == nil {
 		return nil, errors.New("Client is not specified")
