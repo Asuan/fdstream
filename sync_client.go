@@ -32,11 +32,18 @@ type messageReciaver struct {
 	timeout  int64
 }
 
-var mrPool = sync.Pool{
-	New: func() interface{} {
-		return &messageReciaver{responce: make(chan *Message, 1)}
-	},
-}
+var (
+	messageReciverPool = sync.Pool{
+		New: func() interface{} {
+			return &messageReciaver{responce: make(chan *Message, 1)}
+		},
+	}
+	messageWaiterPool = sync.Pool{
+		New: func() interface{} {
+			return &messageWithTimeout{}
+		},
+	}
+)
 
 //SyncClient single gorutine client for sync read write to Async client
 type SyncClient struct {
@@ -55,7 +62,7 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	asyncClient := a.(*AsyncClient)
 	c := &SyncClient{
 		unknowMessage:   make(map[string]*messageWithTimeout, defaultQSize),
-		messageToReturn: make(map[string]*messageReciaver, defaultQSize),
+		messageToReturn: make(map[string]*messageReciaver, 5*defaultQSize),
 		awaitMessageQ:   make(chan *messageReciaver, defaultQSize),
 
 		defaultTimeout: timeout,
@@ -64,64 +71,58 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 
 	//Return specefied message
 	returnWorker := func(c *SyncClient) {
+		var (
+			name string
+			ok   bool
+			now  int64
+			mwt  *messageWithTimeout
+			mr   *messageReciaver
+		)
 		janitorTiker := time.NewTicker(c.defaultTimeout / 3)
-		responceTiker := time.NewTicker(200 * time.Millisecond)
 		defer janitorTiker.Stop()
-		defer responceTiker.Stop()
 
 		for asyncClient.IsAlive() {
 			select {
 			case <-janitorTiker.C: //cleanup old messages and responce waiters
-				now := time.Now().UnixNano()
-				for n, v := range c.unknowMessage {
-					if v.timeout < now {
-						delete(c.unknowMessage, n)
+				now = time.Now().UnixNano()
+				for name, mwt = range c.unknowMessage {
+					if mwt.timeout < now {
+						delete(c.unknowMessage, name)
 					}
 				}
-				for n, v := range c.messageToReturn { //fire timeout
-					if v.timeout < now {
-						v.responce <- ErrMessageTimeout
-						delete(c.messageToReturn, n)
+				for name, mr = range c.messageToReturn { //fire timeout
+					if mr.timeout < now {
+						mr.responce <- ErrMessageTimeout
+						delete(c.messageToReturn, name)
 					}
 				}
 
 			case r := <-c.awaitMessageQ: //add message to wait responce from back side
-				name := r.name
-				if m, ok := c.unknowMessage[name]; ok {
-					r.responce <- m.message
+				name = r.name
+				if mwt, ok = c.unknowMessage[name]; ok {
+					r.responce <- mwt.message
+					messageWaiterPool.Put(mwt)
 					delete(c.unknowMessage, name)
 					continue
 				}
-				if _, ok := c.messageToReturn[name]; ok {
+				if _, ok = c.messageToReturn[name]; ok {
 					r.responce <- ErrMessageDuplicateName
 					continue
 				}
 				r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
 				c.messageToReturn[name] = r
-
-			case <-responceTiker.C: //Check messages and return it
-				for k, v := range c.messageToReturn {
-					if m, ok := c.unknowMessage[k]; ok {
-						v.responce <- m.message
-						delete(c.unknowMessage, k)
-						delete(c.messageToReturn, k)
-					}
-				}
-				if !c.IsAlive() {
-					return
-				}
 			case m := <-asyncClient.toReadMessageQ: //read income messages
-				name := m.Name
+				name = m.Name
 
-				if r, ok := c.messageToReturn[name]; ok {
-					r.responce <- m
+				if mr, ok = c.messageToReturn[name]; ok {
+					mr.responce <- m
 					delete(c.messageToReturn, name)
 					continue
 				}
-				c.unknowMessage[name] = &messageWithTimeout{
-					message: m,
-					timeout: time.Now().Add(c.defaultTimeout).UnixNano(),
-				}
+				waitMessage := messageWaiterPool.Get().(*messageWithTimeout)
+				waitMessage.message = m
+				waitMessage.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
+				c.unknowMessage[name] = waitMessage
 			}
 		}
 
@@ -188,11 +189,11 @@ func (c *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 
 //Read is wait and read message by specified name
 func (c *SyncClient) Read(name string) (*Message, error) {
-	getter := mrPool.Get().(*messageReciaver)
+	getter := messageReciverPool.Get().(*messageReciaver)
 	getter.name = name
 	c.awaitMessageQ <- getter
 	mes := <-getter.responce
-	mrPool.Put(getter)
+	messageReciverPool.Put(getter)
 	if mes.Code < 200 {
 		return mes, nil
 	}

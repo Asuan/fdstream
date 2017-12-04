@@ -37,7 +37,7 @@ func TestSyncWrite(t *testing.T) {
 			handler.WriteNamed(byte(i), "ota", "path", m)
 		}
 	}
-	time.Sleep(100 * time.Microsecond)
+	time.Sleep(400 * time.Microsecond)
 	as.Equal(10, testWriter.counter)
 	for _, reciaveMessages := range testWriter.m {
 		exist := false

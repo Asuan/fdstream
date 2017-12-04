@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"sync"
 )
 
@@ -63,20 +64,39 @@ func (m *Message) Marshal() ([]byte, error) {
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 	uintRouteLen := uint16(len(m.Route))
-	b := make([]byte, 2, 2)
-	binary.BigEndian.PutUint16(b, uintNamelen)
+	b := make([]byte, 6, 6)
+	binary.BigEndian.PutUint16(b[0:2], uintNamelen)
+	binary.BigEndian.PutUint16(b[2:4], uintRouteLen)
+	binary.BigEndian.PutUint16(b[4:6], uintValueLen)
 	buf.Write(b)
-	binary.BigEndian.PutUint16(b, uintRouteLen)
-	buf.Write(b)
-	binary.BigEndian.PutUint16(b, uintValueLen)
-	buf.Write(b)
-
 	buf.WriteString(m.Name)
 	buf.WriteString(m.Route)
 	buf.Write(m.Payload)
 	res := buf.Bytes()
 	bufferPool.Put(buf)
 	return res, nil
+}
+
+//WriteTo implements io.WriteTo interface to write directly to i0.Writer
+// It will be slower than marshal and direct write marshaled bytes.
+func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
+	buf := getBuf()
+	buf.WriteByte(m.Code)
+	uintNamelen := uint16(len(m.Name))
+	uintValueLen := uint16(len(m.Payload))
+	uintRouteLen := uint16(len(m.Route))
+	b := make([]byte, 6, 6)
+	binary.BigEndian.PutUint16(b[0:2], uintNamelen)
+	binary.BigEndian.PutUint16(b[2:4], uintRouteLen)
+	binary.BigEndian.PutUint16(b[4:6], uintValueLen)
+
+	buf.Write(b)
+	buf.WriteString(m.Name)
+	buf.WriteString(m.Route)
+	buf.Write(m.Payload)
+	n, err = writer.Write(buf.Bytes())
+	bufferPool.Put(buf)
+	return
 }
 
 //Unmarshal create message from specified byte array or return error

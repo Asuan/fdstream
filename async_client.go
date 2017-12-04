@@ -113,9 +113,8 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 	//Write message by message to outut reader from chan
 	workerWriter := func(c *AsyncClient, income <-chan *Message) {
 		var (
-			bytes []byte
-			err   error
-			m     *Message
+			err error
+			m   *Message
 		)
 	mainLoop:
 		for {
@@ -123,10 +122,8 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			case <-c.kill:
 				break mainLoop
 			case m = <-income:
-				if bytes, err = m.Marshal(); err == nil {
-					if _, err = c.OutputStream.Write(bytes); err != nil {
-						break mainLoop
-					}
+				if _, err = m.WriteTo(c.OutputStream); err != nil {
+					break mainLoop
 				}
 			}
 		}
