@@ -4,19 +4,19 @@ import (
 	"errors"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 var (
 	//ErrMessageTimeout indicate wait timeout appear
 	ErrMessageTimeout = &Message{Code: erTimeoutCode, Name: "Timeout on waiting message"}
-	//ErrMessageDuplicateName indicate sync client already wait message with same name
-	ErrMessageDuplicateName = &Message{Code: erDuplicateNameErrorCode, Name: "Message with same name already wait response"}
+	//ErrMessageDuplicateID indicate sync client already wait message with same name
+	ErrMessageDuplicateID = &Message{Code: erDuplicateNameErrorCode, Name: "Message with same id already wait response"}
 )
 
 type ClientSyncHander interface {
 	AsyncWriter
-	Read(string) (*Message, error)
 	WriteAndReadResponce(*Message) (*Message, error)
 	IsAlive() bool
 }
@@ -26,16 +26,16 @@ type messageWithTimeout struct {
 	timeout int64
 }
 
-type messageReciaver struct {
+type messageReceiver struct {
 	responce chan *Message
-	name     string
+	id       uint32
 	timeout  int64
 }
 
 var (
-	messageReciverPool = sync.Pool{
+	messageReceiverPool = sync.Pool{
 		New: func() interface{} {
-			return &messageReciaver{responce: make(chan *Message, 1)}
+			return &messageReceiver{responce: make(chan *Message, 1)}
 		},
 	}
 	messageWaiterPool = sync.Pool{
@@ -45,84 +45,85 @@ var (
 	}
 )
 
-//SyncClient single gorutine client for sync read write to Async client
+//SyncClient single goroutine client for sync read write to Async client
 type SyncClient struct {
 	async *AsyncClient
 	//Sync additional fields
-	defaultTimeout time.Duration
-
-	awaitMessageQ   chan *messageReciaver
-	unknowMessage   map[string]*messageWithTimeout
-	messageToReturn map[string]*messageReciaver
+	defaultTimeout  time.Duration
+	counter         *uint32
+	awaitMessageQ   chan *messageReceiver
+	unknownMessage  map[uint32]*messageWithTimeout
+	messageToReturn map[uint32]*messageReceiver
 }
 
 //NewSyncClient create sync handler it have sync read from stream
 func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Duration) (ClientSyncHander, error) {
 	a, _ := NewAsyncHandler(outcome, income)
+	var z uint32
 	asyncClient := a.(*AsyncClient)
 	c := &SyncClient{
-		unknowMessage:   make(map[string]*messageWithTimeout, defaultQSize),
-		messageToReturn: make(map[string]*messageReciaver, 5*defaultQSize),
-		awaitMessageQ:   make(chan *messageReciaver, defaultQSize),
-
-		defaultTimeout: timeout,
-		async:          asyncClient,
+		unknownMessage:  make(map[uint32]*messageWithTimeout, defaultQSize),
+		messageToReturn: make(map[uint32]*messageReceiver, 5*defaultQSize),
+		awaitMessageQ:   make(chan *messageReceiver, defaultQSize),
+		counter:         &z,
+		defaultTimeout:  timeout,
+		async:           asyncClient,
 	}
 
-	//Return specefied message
+	//Return specified message
 	returnWorker := func(c *SyncClient) {
 		var (
-			name string
-			ok   bool
-			now  int64
-			mwt  *messageWithTimeout
-			mr   *messageReciaver
+			id  uint32
+			ok  bool
+			now int64
+			mwt *messageWithTimeout
+			mr  *messageReceiver
 		)
-		janitorTiker := time.NewTicker(c.defaultTimeout / 3)
-		defer janitorTiker.Stop()
+		janitorTicker := time.NewTicker(c.defaultTimeout / 3)
+		defer janitorTicker.Stop()
 
 		for asyncClient.IsAlive() {
 			select {
-			case <-janitorTiker.C: //cleanup old messages and responce waiters
+			case <-janitorTicker.C: //cleanup old messages and responce waiters
 				now = time.Now().UnixNano()
-				for name, mwt = range c.unknowMessage {
+				for id, mwt = range c.unknownMessage {
 					if mwt.timeout < now {
-						delete(c.unknowMessage, name)
+						delete(c.unknownMessage, id)
 					}
 				}
-				for name, mr = range c.messageToReturn { //fire timeout
+				for id, mr = range c.messageToReturn { //fire timeout
 					if mr.timeout < now {
 						mr.responce <- ErrMessageTimeout
-						delete(c.messageToReturn, name)
+						delete(c.messageToReturn, id)
 					}
 				}
 
 			case r := <-c.awaitMessageQ: //add message to wait responce from back side
-				name = r.name
-				if mwt, ok = c.unknowMessage[name]; ok {
+				id = r.id
+				if mwt, ok = c.unknownMessage[id]; ok {
 					r.responce <- mwt.message
 					messageWaiterPool.Put(mwt)
-					delete(c.unknowMessage, name)
+					delete(c.unknownMessage, id)
 					continue
 				}
-				if _, ok = c.messageToReturn[name]; ok {
-					r.responce <- ErrMessageDuplicateName
+				if _, ok = c.messageToReturn[id]; ok { //TODO maybe just remove check
+					r.responce <- ErrMessageDuplicateID
 					continue
 				}
 				r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
-				c.messageToReturn[name] = r
+				c.messageToReturn[id] = r
 			case m := <-asyncClient.toReadMessageQ: //read income messages
-				name = m.Name
+				id = m.Id
 
-				if mr, ok = c.messageToReturn[name]; ok {
+				if mr, ok = c.messageToReturn[id]; ok {
 					mr.responce <- m
-					delete(c.messageToReturn, name)
+					delete(c.messageToReturn, id)
 					continue
 				}
 				waitMessage := messageWaiterPool.Get().(*messageWithTimeout)
 				waitMessage.message = m
 				waitMessage.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
-				c.unknowMessage[name] = waitMessage
+				c.unknownMessage[id] = waitMessage
 			}
 		}
 
@@ -180,20 +181,22 @@ func (c *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if m == nil {
 		return nil, errNilMessage
 	}
+
+	m.Id = atomic.AddUint32(c.counter, 1)
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
 	c.async.toSendMessageQ <- m
-	return c.Read(m.Name)
+	return c.read(m.Id)
 }
 
-//Read is wait and read message by specified name
-func (c *SyncClient) Read(name string) (*Message, error) {
-	getter := messageReciverPool.Get().(*messageReciaver)
-	getter.name = name
+//read is wait and read message by specified id
+func (c *SyncClient) read(id uint32) (*Message, error) {
+	getter := messageReceiverPool.Get().(*messageReceiver)
+	getter.id = id
 	c.awaitMessageQ <- getter
 	mes := <-getter.responce
-	messageReciverPool.Put(getter)
+	messageReceiverPool.Put(getter)
 	if mes.Code < 200 {
 		return mes, nil
 	}

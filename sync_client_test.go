@@ -54,7 +54,7 @@ func TestSyncWrite(t *testing.T) {
 
 func TestSyncRead(t *testing.T) {
 	as := assert.New(t)
-	data, _ := (&Message{"name", "route", byte(0), []byte("anry")}).Marshal()
+	data, _ := (&Message{"name", "route", 0, byte(0), []byte("anry")}).Marshal()
 	readCloser := &TestReaderWaiter{
 		data: data,
 		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
@@ -66,7 +66,7 @@ func TestSyncRead(t *testing.T) {
 	handler, err := NewSyncClient(testWriter, readCloser, time.Duration(2*time.Second))
 	as.Nil(err)
 
-	m, err := handler.Read("name")
+	m, err := (handler.(*SyncClient)).read(0)
 	as.Nil(err)
 	as.Equal(byte(0), m.Code)
 	as.Equal("name", m.Name)

@@ -59,6 +59,7 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			lenB        int //full length of body without header
 			lenR, lenP  uint16
 			cursor      uint16
+			id          uint32
 			code        byte
 			eof         bool
 			header      = make([]byte, messageHeaderSize, messageHeaderSize)
@@ -78,9 +79,10 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 				break
 			}
 			//TODO optimize reading and use default unmarshal func
-			code, cursor, lenR, lenP = UnmarshalHeader(header)
+			code, id, cursor, lenR, lenP = UnmarshalHeader(header)
 			m := &Message{
 				Code:    code,
+				Id:      id,
 				Payload: make([]byte, lenP, lenP),
 			}
 			messageBody = messageBody[:(cursor + lenR + lenP)]
@@ -110,7 +112,7 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 		c.shutdown()
 	}
 
-	//Write message by message to outut reader from chan
+	//Write message by message to output reader from chan
 	workerWriter := func(c *AsyncClient, income <-chan *Message) {
 		var (
 			err error
@@ -180,9 +182,9 @@ func (c *AsyncClient) Read() *Message {
 	return <-c.toReadMessageQ
 }
 
-//Shutdown close all read and write strams but save unreaded or unwrited data.
+//Shutdown close  readbut save un-readed or un-writhed data.
 func (c *AsyncClient) shutdown() {
-	//DO not close chans need grace safe inprogress messages
+	//DO not close chans need grace safe in-progress messages
 	c.killer.Do(func() {
 		close(c.kill)         //It should stop writer
 		c.InputStream.Close() //We should notify all 3d writes about trouble.

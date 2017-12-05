@@ -13,7 +13,7 @@ import (
 //Max size of message
 const (
 	MaxMessageSize                = 1e5
-	messageHeaderSize             = 7
+	messageHeaderSize             = 11
 	erMissRoutingCode        byte = 254
 	erGeneralErrorCode       byte = 255
 	erTimeoutCode            byte = 253
@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	//ErrEmptyName is specifyc error used in name is mandatary value (Sync client)
+	//ErrEmptyName is specify error used in name is mandatary value (Sync client)
 	ErrEmptyName = errors.New("Empty name of message")
 	//ErrTooShortMessage mean incomplete header
 	ErrTooShortMessage = errors.New("Too short message")
@@ -31,16 +31,17 @@ var (
 
 //Message is a communication message for async and sync client
 type Message struct {
-	//Name of message is some message ID,
-	// it is optional for async communication
-	// but mandatary for sync communication to get correct respoce by name
+	//Name of message, some metadata about payload
+	// it is optional
 	Name string
 	//Route of message is optional value to be used by router
 	Route string
+	//Id is optional for async but mandatary for sync communication to get correct responce by Id
+	Id uint32
 	//Code is an a flag of somebody, fill free to use flag < 200
-	//code with value more than 200 mean some error or problem
+	// Code with value more than 200 mean some error or problem
 	Code byte
-	//Payload is a user data to be sended
+	//Payload is a user data to be send
 	Payload []byte
 }
 
@@ -59,15 +60,16 @@ func getBuf() *bytes.Buffer {
 //Marshal marshall message to byte array with simple structure [code,name length, value length, name,value]
 func (m *Message) Marshal() ([]byte, error) {
 	buf := getBuf()
-
-	buf.WriteByte(m.Code)
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 	uintRouteLen := uint16(len(m.Route))
-	b := make([]byte, 6, 6)
-	binary.BigEndian.PutUint16(b[0:2], uintNamelen)
-	binary.BigEndian.PutUint16(b[2:4], uintRouteLen)
-	binary.BigEndian.PutUint16(b[4:6], uintValueLen)
+	b := make([]byte, 11, 11)
+	b[0] = m.Code
+	binary.BigEndian.PutUint32(b[1:5], m.Id)
+	binary.BigEndian.PutUint16(b[5:7], uintNamelen)
+	binary.BigEndian.PutUint16(b[7:9], uintRouteLen)
+	binary.BigEndian.PutUint16(b[9:11], uintValueLen)
+
 	buf.Write(b)
 	buf.WriteString(m.Name)
 	buf.WriteString(m.Route)
@@ -81,14 +83,15 @@ func (m *Message) Marshal() ([]byte, error) {
 // It will be slower than marshal and direct write marshaled bytes.
 func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 	buf := getBuf()
-	buf.WriteByte(m.Code)
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 	uintRouteLen := uint16(len(m.Route))
-	b := make([]byte, 6, 6)
-	binary.BigEndian.PutUint16(b[0:2], uintNamelen)
-	binary.BigEndian.PutUint16(b[2:4], uintRouteLen)
-	binary.BigEndian.PutUint16(b[4:6], uintValueLen)
+	b := make([]byte, 11, 11)
+	b[0] = m.Code
+	binary.BigEndian.PutUint32(b[1:5], m.Id)
+	binary.BigEndian.PutUint16(b[5:7], uintNamelen)
+	binary.BigEndian.PutUint16(b[7:9], uintRouteLen)
+	binary.BigEndian.PutUint16(b[9:11], uintValueLen)
 
 	buf.Write(b)
 	buf.WriteString(m.Name)
@@ -109,11 +112,13 @@ func Unmarshal(b []byte) (*Message, error) {
 		code                         byte
 		m                            *Message
 		cursor, routeLen, payloadLen uint16
+		ID                           uint32
 	)
 
-	code, cursor, routeLen, payloadLen = UnmarshalHeader(b)
+	code, ID, cursor, routeLen, payloadLen = UnmarshalHeader(b)
 	m = &Message{
 		Code:    code,
+		Id:      ID,
 		Payload: make([]byte, payloadLen, payloadLen), //This line slowdown Unmarshal by 2-3 times
 	}
 
@@ -138,16 +143,17 @@ func Unmarshal(b []byte) (*Message, error) {
 
 }
 
-//UnmarshalHeader is unsafe read expect at least 7 bytes length
-func UnmarshalHeader(b []byte) (code byte, nameLen, routeLen, payloadLen uint16) {
+//UnmarshalHeader is unsafe read expect at least 11 bytes length
+func UnmarshalHeader(b []byte) (code byte, id uint32, nameLen, routeLen, payloadLen uint16) {
 	code = b[0]
-	nameLen = binary.BigEndian.Uint16(b[1:3])
-	routeLen = binary.BigEndian.Uint16(b[3:5])
-	payloadLen = binary.BigEndian.Uint16(b[5:7])
+	id = binary.BigEndian.Uint32(b[1:5])
+	nameLen = binary.BigEndian.Uint16(b[5:7])
+	routeLen = binary.BigEndian.Uint16(b[7:9])
+	payloadLen = binary.BigEndian.Uint16(b[9:11])
 	return
 }
 
-//Len calcualte current length of message in bytes
+//Len calculate current length of message in bytes
 func (m *Message) Len() int {
 	return messageHeaderSize + len(m.Name) + len(m.Route) + len(m.Payload)
 }

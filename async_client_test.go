@@ -81,10 +81,10 @@ func TestWrite(t *testing.T) {
 	}
 	time.Sleep(100 * time.Microsecond)
 	as.Equal(10, testWriter.counter)
-	for _, reciaveMessages := range testWriter.m {
+	for _, receiveMessages := range testWriter.m {
 		exist := false
-		for _, sended := range testMessages {
-			if bytes.Contains(reciaveMessages, sended.Payload) && bytes.Contains(reciaveMessages, []byte(sended.Name)) {
+		for _, s := range testMessages {
+			if bytes.Contains(receiveMessages, s.Payload) && bytes.Contains(receiveMessages, []byte(s.Name)) {
 				exist = true
 				break
 			}
@@ -96,7 +96,7 @@ func TestWrite(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	as := assert.New(t)
-	data, _ := (&Message{"name", "route", byte(0), []byte("anry")}).Marshal()
+	data, _ := (&Message{"name", "route", 0, byte(0), []byte("anry")}).Marshal()
 	readCloser := &TestReaderWaiter{
 		data: data,
 		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer

@@ -10,9 +10,9 @@ type Router struct {
 	name     string
 	inputQ   <-chan *Message
 	outputQ  chan *Message
-	routings map[string]reciver
+	routings map[string]receiver
 }
-type reciver struct {
+type receiver struct {
 	input  chan<- *Message
 	output chan *Message
 }
@@ -27,14 +27,14 @@ func (r *Router) AddRouting(name string, in chan<- *Message, out chan *Message) 
 		return errors.New("routing with specified name already exists")
 	}
 
-	r.routings[name] = reciver{
+	r.routings[name] = receiver{
 		input:  in,
 		output: out,
 	}
 
-	//Is one way chan or not we can expecte no routings reciver
+	//Is one way chan or not we can expect no routings receiver
 	if out != nil {
-		//The gorutine send responce from reciver to main chan
+		//The goroutine send responce from receiver to main chan
 		go func(output <-chan *Message) {
 			for m := range output {
 				r.outputQ <- m
@@ -82,7 +82,7 @@ func NewRouter(name string, input <-chan *Message, output chan *Message) (*Route
 		name:     name,
 		inputQ:   input,
 		outputQ:  output,
-		routings: make(map[string]reciver, 10),
+		routings: make(map[string]receiver, 10),
 	}
 	return router, nil
 }

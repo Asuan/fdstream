@@ -132,14 +132,14 @@ func HandlTCPWitRouting(conn *net.TCPConn, instanceNum int) error {
 		case message = <-in1:
 			logger.Printf("Get message router 1 message: %s", message.Name)
 			out1 <- &fdstream.Message{
-				Code:    0,
+				Id:      message.Id,
 				Name:    message.Name,
 				Payload: backPaylod,
 			}
 		case message = <-in2:
 			logger.Printf("Get message router 2 message: %s", message.Name)
 			out2 <- &fdstream.Message{
-				Code:    0,
+				Id:      message.Id,
 				Name:    message.Name,
 				Payload: backPaylod,
 			}
@@ -179,7 +179,7 @@ func HandleTCPWithoutRouting(conn *net.TCPConn, instanceNum int) error {
 			logger.Printf("Get message %s", message.Name)
 
 			cl.Write(&fdstream.Message{
-				Code:    0,
+				Id:      message.Id,
 				Name:    message.Name,
 				Payload: backPaylod,
 			})
