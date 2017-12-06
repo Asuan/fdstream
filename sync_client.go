@@ -150,18 +150,17 @@ func (c *SyncClient) Write(m *Message) error {
 }
 
 //WriteNamed write object to destination with async way
-func (c *SyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
+func (c *SyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
 	var b []byte
-
 	if b, err = m.Marshal(); err == nil {
-		return c.Write(NewMessage(code, name, route, b))
+		return c.Write(NewMessage(code, name, b))
 	}
 	return err
 }
 
 //WriteBytes bytes to destination with async way
-func (c *SyncClient) WriteBytes(code byte, name, route string, payload []byte) error {
-	return c.Write(NewMessage(code, name, route, payload))
+func (c *SyncClient) WriteBytes(code byte, name string, payload []byte) error {
+	return c.Write(NewMessage(code, name, payload))
 }
 
 //WriteAndReadResponce will write message and expect responce or error

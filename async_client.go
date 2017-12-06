@@ -13,15 +13,15 @@ var (
 	errNilMessage = errors.New("Nil message")
 )
 
-type AsyncWriter interface {
-	Write(*Message) error
-	WriteNamed(byte, string, string, Marshaller) error
-	WriteBytes(byte, string, string, []byte) error
+//Marshaller interface to pass custom object it is same with many *Marshal interfaces
+type Marshaler interface {
+	Marshal() ([]byte, error)
 }
 
-//Marshaller interface to pass custom object it is same with many *Marshal interfaces
-type Marshaller interface {
-	Marshal() ([]byte, error)
+type AsyncWriter interface {
+	Write(*Message) error
+	WriteNamed(code byte, name string, object Marshaler) error
+	WriteBytes(code byte, name string, payload []byte) error
 }
 
 type AsyncHandler interface {
@@ -34,7 +34,7 @@ type AsyncClient struct {
 	OutputStream   io.Writer
 	InputStream    io.ReadCloser
 	toSendMessageQ chan *Message //Queue to send to remote
-	toReadMessageQ chan *Message //Queue to to read message
+	toReadMessageQ chan *Message //Queue to read message
 	killer         sync.Once
 	kill           chan bool
 	alive          atomic.Value
@@ -57,7 +57,7 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			err         error
 			n           int
 			lenB        int //full length of body without header
-			lenR, lenP  uint16
+			lenP        uint16
 			cursor      uint16
 			id          uint32
 			code        byte
@@ -79,13 +79,13 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 				break
 			}
 			//TODO optimize reading
-			code, id, cursor, lenR, lenP = unmarshalHeader(header)
+			code, id, cursor, lenP = unmarshalHeader(header)
 			m := &Message{
 				Code:    code,
 				Id:      id,
 				Payload: make([]byte, lenP, lenP),
 			}
-			messageBody = messageBody[:(cursor + lenR + lenP)]
+			messageBody = messageBody[:(cursor + lenP)]
 
 			lenB, err = c.InputStream.Read(messageBody)
 			if err != nil {
@@ -99,10 +99,7 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			if cursor > 0 {
 				m.Name = string(messageBody[0:cursor])
 			}
-			if lenR > 0 {
-				m.Route = string(messageBody[cursor : cursor+lenR])
-				cursor += lenR
-			}
+
 			if lenP > 0 {
 				copy(m.Payload, messageBody[cursor:cursor+lenP])
 			}
@@ -149,10 +146,10 @@ func (c *AsyncClient) Write(m *Message) error {
 
 //WriteNamed will write marshalable object to destination
 //The function is thread safe
-func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
+func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
-		return c.Write(NewMessage(code, name, route, b))
+		return c.Write(NewMessage(code, name, b))
 	}
 	return err
 
@@ -160,8 +157,8 @@ func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (e
 
 //WriteBytes will write bytes to destination
 //The function is thread safe
-func (c *AsyncClient) WriteBytes(code byte, name, route string, payload []byte) (err error) {
-	return c.Write(NewMessage(code, name, route, payload))
+func (c *AsyncClient) WriteBytes(code byte, name string, payload []byte) (err error) {
+	return c.Write(NewMessage(code, name, payload))
 }
 
 //Read message read message from internal chan

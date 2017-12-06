@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"runtime/pprof"
-	"strconv"
 
 	"log"
 	"math/rand"
@@ -118,11 +117,9 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		time.Sleep(time.Duration(r) * time.Millisecond)
 
 		//create message with unique name for sending data and waiting responce by specified name
-		message = &fdstream.Message{
-			Name:    fmt.Sprintf("Client%d-M%d", instanceNum, i),
-			Route:   strconv.Itoa(i % 2), //Simple route rounding
-			Payload: make([]byte, r*15, r*15),
-		}
+		message = fdstream.NewMessage(0,
+			fmt.Sprintf("Client%d-M%d", instanceNum, i),
+			make([]byte, r*15, r*15))
 		totalSend += message.Len()
 		start := time.Now()
 		if responce, err = cl.WriteAndReadResponce(message); err == nil {
@@ -140,5 +137,4 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSend)
 	atomic.AddInt64(totalBytes, int64(totalSend))
 	atomic.AddInt64(totalMessages, int64(i))
-
 }

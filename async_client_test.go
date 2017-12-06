@@ -76,7 +76,7 @@ func TestWrite(t *testing.T) {
 		if i%2 == 0 {
 			handler.Write(m)
 		} else {
-			handler.WriteNamed(byte(i), "ota", "", m)
+			handler.WriteNamed(byte(i), "ota", m)
 		}
 	}
 	time.Sleep(100 * time.Microsecond)
@@ -96,7 +96,7 @@ func TestWrite(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	as := assert.New(t)
-	data, _ := (&Message{"name", "route", 0, byte(0), []byte("anry")}).Marshal()
+	data, _ := (&Message{"name", 0, byte(0), []byte("anry")}).Marshal()
 	readCloser := &TestReaderWaiter{
 		data: data,
 		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
@@ -111,7 +111,7 @@ func TestRead(t *testing.T) {
 	m := handler.Read()
 	as.Equal(byte(0), m.Code)
 	as.Equal("name", m.Name)
-	as.Equal("route", m.Route)
+
 	as.Equal([]byte("anry"), m.Payload)
 
 	handler.(*AsyncClient).shutdown()

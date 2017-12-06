@@ -87,11 +87,9 @@ func main() {
 		conn.SetWriteBuffer(fdstream.MaxMessageSize * 200)
 		conn.SetKeepAlive(true)
 
-		//Exmaple handlers for connections without routing
-		//go HandleTCPWithoutRouting(conn, i)
+		//Example handlers for connections
+		go HandleTCP(conn, i)
 
-		//Example how to handle connection with routing messages
-		go HandlTCPWitRouting(conn, i)
 		i++
 	}
 
@@ -99,59 +97,8 @@ func main() {
 
 }
 
-//HandlTCPWitRouting handle income messages with routings to separate chans
-func HandlTCPWitRouting(conn *net.TCPConn, instanceNum int) error {
-	defer conn.Close()
-	logger.Printf("Handle connection: %s", conn.RemoteAddr().String())
-	cl, err := fdstream.NewAsyncHandler(conn, conn)
-	if err != nil {
-		return err
-	}
-
-	//Create Router for client
-	r, err := fdstream.NewRouterForClient(fmt.Sprintf("router%d", instanceNum), cl.(*fdstream.AsyncClient))
-	if err != nil {
-		return err
-	}
-
-	//Add routings and start router
-	in1, out1 := make(chan *fdstream.Message, 100), make(chan *fdstream.Message, 100)
-	r.AddRouting("0", in1, out1)
-	in2, out2 := make(chan *fdstream.Message, 100), make(chan *fdstream.Message, 100)
-	r.AddRouting("1", in2, out2)
-	r.Start() //It is important to start routings
-	var (
-		i          int
-		message    *fdstream.Message
-		backPaylod []byte
-	)
-	for cl.IsAlive() {
-		i++
-		backPaylod = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
-		select {
-		case message = <-in1:
-			logger.Printf("Get message router 1 message: %s", message.Name)
-			out1 <- &fdstream.Message{
-				Id:      message.Id,
-				Name:    message.Name,
-				Payload: backPaylod,
-			}
-		case message = <-in2:
-			logger.Printf("Get message router 2 message: %s", message.Name)
-			out2 <- &fdstream.Message{
-				Id:      message.Id,
-				Name:    message.Name,
-				Payload: backPaylod,
-			}
-		}
-	}
-
-	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
-	return nil
-}
-
-//HandleTCPWithoutRouting handle messages wihtout routings
-func HandleTCPWithoutRouting(conn *net.TCPConn, instanceNum int) error {
+//HandleTCP handle messages
+func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 	defer conn.Close()
 
 	logger.Printf("Handle connection: %s", conn.RemoteAddr().String())
@@ -167,21 +114,22 @@ func HandleTCPWithoutRouting(conn *net.TCPConn, instanceNum int) error {
 		return err
 	}
 
+	//Example worker for handling income messages
 	worker := func() {
 		var (
-			message    *fdstream.Message
-			backPaylod []byte
+			message     *fdstream.Message
+			backPayload []byte
 		)
 		for cl.IsAlive() {
 			i++
-			backPaylod = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
-			message = cl.Read()
+			backPayload = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
+			message = cl.Read() //It is thread safe to read and write
 			logger.Printf("Get message %s", message.Name)
 
 			cl.Write(&fdstream.Message{
-				Id:      message.Id,
-				Name:    message.Name,
-				Payload: backPaylod,
+				Id:      message.Id,   //It is need for sync communication
+				Name:    message.Name, //Same name for validating
+				Payload: backPayload,
 			})
 		}
 		wg.Done()
