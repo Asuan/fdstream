@@ -62,7 +62,7 @@ func NewMessage(code byte, name string, payload []byte) *Message {
 	}
 }
 
-//Marshal marshall message to byte array with simple structure [code,name length, value length, name,value]
+//Marshal marshal message to byte array with simple structure [code, id,name length, value length, name,value]
 func (m *Message) Marshal() ([]byte, error) {
 	buf := getBuf()
 	uintNamelen := uint16(len(m.Name))
@@ -82,8 +82,7 @@ func (m *Message) Marshal() ([]byte, error) {
 	return res, nil
 }
 
-//WriteTo implements io.WriteTo interface to write directly to i0.Writer
-// It will be slower than marshal and direct write marshaled bytes.
+//WriteTo implements io.WriteTo interface to write directly to io.Writer
 func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 	buf := getBuf()
 	uintNamelen := uint16(len(m.Name))
@@ -97,14 +96,21 @@ func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 
 	buf.Write(header)
 	buf.WriteString(m.Name)
-
 	buf.Write(m.Payload)
+
+	//This is dangerous operation: we loose thread safe writing ability
+	//Commented code faster but not not thread safe
+	//writer.Write(header)
+	//writer.Write([]byte(m.Name))
+	//writer.Write(m.Payload)
+	//
 	n, err = writer.Write(buf.Bytes())
 	bufferPool.Put(buf)
 	return
 }
 
 //unmarshal create message from specified byte array or return error
+// for testing performance
 func unmarshal(b []byte) (*Message, error) {
 	if len(b) < messageHeaderSize {
 		return nil, ErrTooShortMessage
@@ -145,8 +151,7 @@ func unmarshalHeader(b []byte) (code byte, id uint32, nameLen, payloadLen uint16
 	code = b[0]
 	id = binary.BigEndian.Uint32(b[1:5])
 	nameLen = binary.BigEndian.Uint16(b[5:7])
-
-	payloadLen = binary.BigEndian.Uint16(b[7:9])
+	payloadLen = binary.BigEndian.Uint16(b[7:messageHeaderSize])
 	return
 }
 

@@ -71,7 +71,7 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	}
 
 	//Return specified message
-	returnWorker := func(c *SyncClient) {
+	returnWorker := func(sync *SyncClient) {
 		var (
 			id  uint32
 			ok  bool
@@ -79,59 +79,59 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 			mwt *messageWithTimeout
 			mr  *messageReceiver
 		)
-		janitorTicker := time.NewTicker(c.defaultTimeout / 3)
+		janitorTicker := time.NewTicker(sync.defaultTimeout / 3)
 		defer janitorTicker.Stop()
 
 		for asyncClient.IsAlive() {
 			select {
 			case <-janitorTicker.C: //cleanup old messages and responce waiters
 				now = time.Now().UnixNano()
-				for id, mwt = range c.unknownMessage {
+				for id, mwt = range sync.unknownMessage {
 					if mwt.timeout < now {
-						delete(c.unknownMessage, id)
+						delete(sync.unknownMessage, id)
 					}
 				}
-				for id, mr = range c.messageToReturn { //fire timeout
+				for id, mr = range sync.messageToReturn { //fire timeout
 					if mr.timeout < now {
 						mr.responce <- ErrMessageTimeout
-						delete(c.messageToReturn, id)
+						delete(sync.messageToReturn, id)
 					}
 				}
 
-			case r := <-c.awaitMessageQ: //add message to wait responce from back side
+			case r := <-sync.awaitMessageQ: //add messageReceiver to wait responce from back side
 				id = r.id
-				if mwt, ok = c.unknownMessage[id]; ok {
+				if mwt, ok = sync.unknownMessage[id]; ok {
 					r.responce <- mwt.message
 					messageWaiterPool.Put(mwt)
-					delete(c.unknownMessage, id)
+					delete(sync.unknownMessage, id)
 					continue
 				}
-				if _, ok = c.messageToReturn[id]; ok { //TODO maybe just remove check
+				if _, ok = sync.messageToReturn[id]; ok { //TODO maybe just remove check
 					r.responce <- ErrMessageDuplicateID
 					continue
 				}
-				r.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
-				c.messageToReturn[id] = r
+				r.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
+				sync.messageToReturn[id] = r
 			case m := <-asyncClient.toReadMessageQ: //read income messages
 				id = m.Id
 
-				if mr, ok = c.messageToReturn[id]; ok {
+				if mr, ok = sync.messageToReturn[id]; ok {
 					mr.responce <- m
-					delete(c.messageToReturn, id)
+					delete(sync.messageToReturn, id)
 					continue
 				}
 				waitMessage := messageWaiterPool.Get().(*messageWithTimeout)
 				waitMessage.message = m
-				waitMessage.timeout = time.Now().Add(c.defaultTimeout).UnixNano()
-				c.unknownMessage[id] = waitMessage
+				waitMessage.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
+				sync.unknownMessage[id] = waitMessage
 			}
 		}
 
-		for n, v := range c.messageToReturn { //TODO fire not timeout but another
+		for n, v := range sync.messageToReturn { //TODO fire not timeout but another
 			v.responce <- ErrMessageTimeout
-			delete(c.messageToReturn, n)
+			delete(sync.messageToReturn, n)
 		}
-		for r := range c.awaitMessageQ {
+		for r := range sync.awaitMessageQ {
 			r.responce <- ErrMessageTimeout
 		}
 

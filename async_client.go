@@ -81,8 +81,10 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			//TODO optimize reading
 			code, id, cursor, lenP = unmarshalHeader(header)
 			m := &Message{
-				Code:    code,
-				Id:      id,
+				Code: code,
+				Id:   id,
+
+				//This is so slow operation but we should copy data from messageBody buffer
 				Payload: make([]byte, lenP, lenP),
 			}
 			messageBody = messageBody[:(cursor + lenP)]

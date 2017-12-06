@@ -1,6 +1,7 @@
 package fdstream
 
 import (
+	"io/ioutil"
 	"reflect"
 	"testing"
 )
@@ -129,10 +130,10 @@ func testBenchMarshal(length int, b *testing.B) {
 
 		message *Message
 	}{
+		{"name-5", &Message{string(make([]byte, 5, 5)), 0, 0, payload}},
 		{"name-10", &Message{string(make([]byte, 10, 10)), 0, 0, payload}},
 		{"name-20", &Message{string(make([]byte, 20, 20)), 0, 0, payload}},
 		{"name-50", &Message{string(make([]byte, 50, 50)), 0, 0, payload}},
-		{"name-5", &Message{string(make([]byte, 5, 5)), 0, 0, payload}},
 	}
 	b.StartTimer()
 	for _, bm := range benchmarks {
@@ -172,12 +173,41 @@ func testBenchUnmarshal(length int, b *testing.B) {
 	}
 }
 
+func testBenchWriteTo(length int, b *testing.B) {
+	b.StopTimer()
+	payload := make([]byte, length, length)
+
+	benchmarks := []struct {
+		name string
+
+		message *Message
+	}{
+		{"name-10", &Message{string(make([]byte, 10, 10)), 0, 0, payload}},
+		{"name-20", &Message{string(make([]byte, 20, 20)), 0, 0, payload}},
+		{"name-50", &Message{string(make([]byte, 50, 50)), 0, 0, payload}},
+		{"name-5", &Message{string(make([]byte, 5, 5)), 0, 0, payload}},
+	}
+	b.StartTimer()
+	for _, bm := range benchmarks {
+		b.Run(bm.name, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				bm.message.WriteTo(ioutil.Discard)
+			}
+		})
+	}
+}
+
 func Benchmark_Marshal2(b *testing.B)    { testBenchMarshal(2, b) }
-func Benchmark_Marshal10(b *testing.B)   { testBenchMarshal(10, b) }
-func Benchmark_Marshal100(b *testing.B)  { testBenchMarshal(100, b) }
-func Benchmark_Marshal1000(b *testing.B) { testBenchMarshal(1000, b) }
+func Benchmark_Marshal50(b *testing.B)   { testBenchMarshal(50, b) }
+func Benchmark_Marshal500(b *testing.B)  { testBenchMarshal(500, b) }
+func Benchmark_Marshal5000(b *testing.B) { testBenchMarshal(5000, b) }
 
 func Benchmark_Unmarshal2(b *testing.B)    { testBenchUnmarshal(2, b) }
-func Benchmark_Unmarshal10(b *testing.B)   { testBenchUnmarshal(10, b) }
-func Benchmark_Unmarshal100(b *testing.B)  { testBenchUnmarshal(100, b) }
-func Benchmark_Unmarshal1000(b *testing.B) { testBenchUnmarshal(1000, b) }
+func Benchmark_Unmarshal50(b *testing.B)   { testBenchUnmarshal(50, b) }
+func Benchmark_Unmarshal500(b *testing.B)  { testBenchUnmarshal(500, b) }
+func Benchmark_Unmarshal5000(b *testing.B) { testBenchUnmarshal(5000, b) }
+
+func Benchmark_WriteTo2(b *testing.B)    { testBenchWriteTo(2, b) }
+func Benchmark_WriteTo50(b *testing.B)   { testBenchWriteTo(50, b) }
+func Benchmark_WriteTo500(b *testing.B)  { testBenchWriteTo(500, b) }
+func Benchmark_WriteTo5000(b *testing.B) { testBenchWriteTo(5000, b) }
