@@ -12,7 +12,7 @@ var (
 	//ErrMessageTimeout indicate wait timeout appear
 	ErrMessageTimeout = &Message{Code: erTimeoutCode, Name: "Timeout on waiting message"}
 	//ErrMessageDuplicateID indicate sync client already wait message with same name
-	ErrMessageDuplicateID = &Message{Code: erDuplicateNameErrorCode, Name: "Message with same id already wait response"}
+	ErrMessageDuplicateID = &Message{Code: erDuplicateIdErrorCode, Name: "Message with same id already wait response"}
 )
 
 type ClientSyncHander interface {
@@ -154,26 +154,14 @@ func (c *SyncClient) WriteNamed(code byte, name, route string, m Marshaller) (er
 	var b []byte
 
 	if b, err = m.Marshal(); err == nil {
-		return c.Write(
-			&Message{
-				Code:    code,
-				Name:    name,
-				Route:   route,
-				Payload: b,
-			})
+		return c.Write(NewMessage(code, name, route, b))
 	}
 	return err
 }
 
 //WriteBytes bytes to destination with async way
 func (c *SyncClient) WriteBytes(code byte, name, route string, payload []byte) error {
-	return c.Write(
-		&Message{
-			Code:    code,
-			Name:    name,
-			Route:   route,
-			Payload: payload,
-		})
+	return c.Write(NewMessage(code, name, route, payload))
 }
 
 //WriteAndReadResponce will write message and expect responce or error

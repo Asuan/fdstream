@@ -52,7 +52,7 @@ func Test_unmarshal(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := Unmarshal(tt.args)
+			got, err := unmarshal(tt.args)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -179,7 +179,7 @@ func testBenchUnmarshal(length int, b *testing.B) {
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				Unmarshal(bm.message)
+				unmarshal(bm.message)
 			}
 		})
 	}

@@ -78,8 +78,8 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 			if n != messageHeaderSize { //Wrong message header read looks broken state
 				break
 			}
-			//TODO optimize reading and use default unmarshal func
-			code, id, cursor, lenR, lenP = UnmarshalHeader(header)
+			//TODO optimize reading
+			code, id, cursor, lenR, lenP = unmarshalHeader(header)
 			m := &Message{
 				Code:    code,
 				Id:      id,
@@ -89,7 +89,7 @@ func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (AsyncHandler, err
 
 			lenB, err = c.InputStream.Read(messageBody)
 			if err != nil {
-				//try read last message it EOF appear
+				//try read last message if EOF appear
 				if err != io.EOF || lenB != len(messageBody) {
 					break
 				}
@@ -152,13 +152,7 @@ func (c *AsyncClient) Write(m *Message) error {
 func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
-		return c.Write(
-			&Message{
-				Code:    code,
-				Name:    name,
-				Route:   route,
-				Payload: b,
-			})
+		return c.Write(NewMessage(code, name, route, b))
 	}
 	return err
 
@@ -167,13 +161,7 @@ func (c *AsyncClient) WriteNamed(code byte, name, route string, m Marshaller) (e
 //WriteBytes will write bytes to destination
 //The function is thread safe
 func (c *AsyncClient) WriteBytes(code byte, name, route string, payload []byte) (err error) {
-	return c.Write(
-		&Message{
-			Code:    code,
-			Name:    name,
-			Route:   route,
-			Payload: payload,
-		})
+	return c.Write(NewMessage(code, name, route, payload))
 }
 
 //Read message read message from internal chan

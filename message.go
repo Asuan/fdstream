@@ -12,12 +12,12 @@ import (
 
 //Max size of message
 const (
-	MaxMessageSize                = 1e5
-	messageHeaderSize             = 11
-	erMissRoutingCode        byte = 254
-	erGeneralErrorCode       byte = 255
-	erTimeoutCode            byte = 253
-	erDuplicateNameErrorCode byte = 252
+	MaxMessageSize              = 1e5
+	messageHeaderSize           = 11
+	erMissRoutingCode      byte = 254
+	erGeneralErrorCode     byte = 255
+	erTimeoutCode          byte = 253
+	erDuplicateIdErrorCode byte = 252
 )
 
 var (
@@ -54,7 +54,15 @@ func getBuf() *bytes.Buffer {
 		return buf
 	}
 	return bytes.NewBuffer(make([]byte, 0, MaxMessageSize))
+}
 
+func NewMessage(code byte, name, route string, payload []byte) *Message {
+	return &Message{
+		Code:    code,
+		Name:    name,
+		Route:   route,
+		Payload: payload,
+	}
 }
 
 //Marshal marshall message to byte array with simple structure [code,name length, value length, name,value]
@@ -74,7 +82,7 @@ func (m *Message) Marshal() ([]byte, error) {
 	buf.WriteString(m.Name)
 	buf.WriteString(m.Route)
 	buf.Write(m.Payload)
-	res := buf.Bytes()
+	res := buf.Bytes() //TODO maybe copy instread
 	bufferPool.Put(buf)
 	return res, nil
 }
@@ -102,8 +110,8 @@ func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 	return
 }
 
-//Unmarshal create message from specified byte array or return error
-func Unmarshal(b []byte) (*Message, error) {
+//unmarshal create message from specified byte array or return error
+func unmarshal(b []byte) (*Message, error) {
 	if len(b) < messageHeaderSize {
 		return nil, ErrTooShortMessage
 	}
@@ -115,7 +123,7 @@ func Unmarshal(b []byte) (*Message, error) {
 		ID                           uint32
 	)
 
-	code, ID, cursor, routeLen, payloadLen = UnmarshalHeader(b)
+	code, ID, cursor, routeLen, payloadLen = unmarshalHeader(b)
 	m = &Message{
 		Code:    code,
 		Id:      ID,
@@ -143,8 +151,8 @@ func Unmarshal(b []byte) (*Message, error) {
 
 }
 
-//UnmarshalHeader is unsafe read expect at least 11 bytes length
-func UnmarshalHeader(b []byte) (code byte, id uint32, nameLen, routeLen, payloadLen uint16) {
+//unmarshalHeader is unsafe read expect at least 11 bytes length
+func unmarshalHeader(b []byte) (code byte, id uint32, nameLen, routeLen, payloadLen uint16) {
 	code = b[0]
 	id = binary.BigEndian.Uint32(b[1:5])
 	nameLen = binary.BigEndian.Uint16(b[5:7])
