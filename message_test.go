@@ -158,10 +158,10 @@ func testBenchUnmarshal(length int, b *testing.B) {
 
 		message []byte
 	}{
+		{"name-5", stubMessage(5)},
 		{"name-10", stubMessage(10)},
 		{"name-20", stubMessage(20)},
 		{"name-50", stubMessage(50)},
-		{"name-5", stubMessage(5)},
 	}
 	b.StartTimer()
 	for _, bm := range benchmarks {
@@ -182,10 +182,10 @@ func testBenchWriteTo(length int, b *testing.B) {
 
 		message *Message
 	}{
+		{"name-5", &Message{string(make([]byte, 5, 5)), 0, 0, payload}},
 		{"name-10", &Message{string(make([]byte, 10, 10)), 0, 0, payload}},
 		{"name-20", &Message{string(make([]byte, 20, 20)), 0, 0, payload}},
 		{"name-50", &Message{string(make([]byte, 50, 50)), 0, 0, payload}},
-		{"name-5", &Message{string(make([]byte, 5, 5)), 0, 0, payload}},
 	}
 	b.StartTimer()
 	for _, bm := range benchmarks {

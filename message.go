@@ -54,6 +54,7 @@ func getBuf() *bytes.Buffer {
 	return bytes.NewBuffer(make([]byte, 0, MaxMessageSize))
 }
 
+//NewMessage create new with specified data
 func NewMessage(code byte, name string, payload []byte) *Message {
 	return &Message{
 		Code:    code,
@@ -68,13 +69,13 @@ func (m *Message) Marshal() ([]byte, error) {
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 
-	header := make([]byte, messageHeaderSize, messageHeaderSize)
+	var header [messageHeaderSize]byte
 	header[0] = m.Code
 	binary.BigEndian.PutUint32(header[1:5], m.Id)
 	binary.BigEndian.PutUint16(header[5:7], uintNamelen)
 	binary.BigEndian.PutUint16(header[7:9], uintValueLen)
 
-	buf.Write(header)
+	buf.Write(header[0:9])
 	buf.WriteString(m.Name)
 	buf.Write(m.Payload)
 	res := buf.Bytes() //TODO maybe copy instread
@@ -88,13 +89,13 @@ func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 
-	header := make([]byte, messageHeaderSize, messageHeaderSize)
+	var header [messageHeaderSize]byte
 	header[0] = m.Code
 	binary.BigEndian.PutUint32(header[1:5], m.Id)
 	binary.BigEndian.PutUint16(header[5:7], uintNamelen)
 	binary.BigEndian.PutUint16(header[7:9], uintValueLen)
 
-	buf.Write(header)
+	buf.Write(header[0:9])
 	buf.WriteString(m.Name)
 	buf.Write(m.Payload)
 
@@ -134,6 +135,7 @@ func unmarshal(b []byte) (*Message, error) {
 		return nil, ErrBinaryLength
 	}
 
+	//Cursor is same name len for now
 	if cursor > 0 {
 		m.Name = string(b[messageHeaderSize : messageHeaderSize+cursor])
 	}

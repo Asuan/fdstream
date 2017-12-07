@@ -91,7 +91,7 @@ func TestWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
-	handler.(*AsyncClient).shutdown()
+	handler.Shutdown()
 }
 
 func TestRead(t *testing.T) {
@@ -114,5 +114,50 @@ func TestRead(t *testing.T) {
 
 	as.Equal([]byte("anry"), m.Payload)
 
-	handler.(*AsyncClient).shutdown()
+	handler.Shutdown()
+}
+
+func TestRestore(t *testing.T) {
+	as := assert.New(t)
+	data, _ := (&Message{"name", 0, byte(0), []byte("anry")}).Marshal()
+	readCloser := &TestReaderWaiter{
+		data: data,
+		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
+	}
+
+	testWriter := &TestWriteCloser{
+		m: map[int][]byte{},
+	}
+	handler, err := NewAsyncHandler(testWriter, readCloser)
+	as.Nil(err)
+
+	m := handler.Read()
+	as.Equal(byte(0), m.Code)
+	as.Equal("name", m.Name)
+
+	as.Equal([]byte("anry"), m.Payload)
+
+	handler.Shutdown()
+	as.False(handler.IsAlive())
+
+	//Restore and read again
+	data, _ = (&Message{"name", 0, byte(0), []byte("anry")}).Marshal()
+	readCloser = &TestReaderWaiter{
+		data: data,
+		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
+	}
+
+	testWriter = &TestWriteCloser{
+		m: map[int][]byte{},
+	}
+	handler.Restore(testWriter, readCloser)
+	as.True(handler.IsAlive())
+
+	m = handler.Read()
+	as.Equal(byte(0), m.Code)
+	as.Equal("name", m.Name)
+
+	as.Equal([]byte("anry"), m.Payload)
+
+	handler.Shutdown()
 }
