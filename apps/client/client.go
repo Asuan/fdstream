@@ -82,7 +82,7 @@ func main() {
 	conn.SetKeepAlive(true)
 
 	//Create new communication client with timeout for messages inside stream 2 second
-	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(2*time.Minute))
+	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(10*time.Second))
 	if err != nil {
 		logger.Printf("Could not create instance %v", err)
 	}
@@ -96,14 +96,14 @@ func main() {
 
 	//Some end statistic of communication
 	duration := time.Now().Sub(timeStart)
-	logger.Printf("Data rate: %f", float64(*totalBytes)/duration.Seconds())
+	logger.Printf("Data rate: %f bytes", float64(*totalBytes)/duration.Seconds())
 	logger.Printf("Hits: %f", float64(*totalMessages)/duration.Seconds())
 	logger.Printf("Average wait: %v", time.Duration(*totalWait / *totalMessages))
 	logger.Printf("Stop all")
 }
 
 //HandlerClient some test worker for communication
-func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
+func HandlerClient(cl *fdstream.SyncClient, instanceNum int) {
 	defer wg.Done()
 	var (
 		i                 int
@@ -123,15 +123,16 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		totalSend += message.Len()
 		start := time.Now()
 		if responce, err = cl.WriteAndReadResponce(message); err == nil {
+			delta := time.Now().Sub(start)
+			logger.Printf("Wait responce during %v client %d %dmessage", delta, instanceNum, i)
+			atomic.AddInt64(totalWait, int64(delta))
 			if responce.Name != message.Name {
 				logger.Printf("Wrong responce client %d %dmessage %s want: %s", instanceNum, i, string(message.Name), string(responce.Name))
 			}
 		} else {
 			logger.Printf("Error in responce client %d %dmessage %v", instanceNum, i, err)
 		}
-		delta := time.Now().Sub(start)
-		logger.Printf("Wait responce during %v client %d %dmessage", delta, instanceNum, i)
-		atomic.AddInt64(totalWait, int64(delta))
+
 	}
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSend)

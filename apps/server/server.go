@@ -107,7 +107,7 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 		i   int
 		err error
 		wg  sync.WaitGroup
-		cl  fdstream.AsyncHandler
+		cl  *fdstream.AsyncClient
 	)
 	cl, err = fdstream.NewAsyncHandler(conn, conn)
 	if err != nil {
@@ -115,18 +115,18 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 	}
 
 	//Example worker for handling income messages
-	worker := func() {
+	worker := func(async *fdstream.AsyncClient) {
 		var (
 			message     *fdstream.Message
 			backPayload []byte
 		)
-		for cl.IsAlive() {
+		for async.IsAlive() {
 			i++
 			backPayload = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
-			message = cl.Read() //It is thread safe to read and write
+			message = async.Read() //It is thread safe to read and write
 			logger.Printf("Get message %s", message.Name)
 
-			cl.Write(&fdstream.Message{
+			async.Write(&fdstream.Message{
 				Id:      message.Id,   //It is need for sync communication
 				Name:    message.Name, //Same name for validating
 				Payload: backPayload,
@@ -136,8 +136,8 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 	}
 
 	wg.Add(2)
-	go worker()
-	go worker()
+	go worker(cl)
+	go worker(cl)
 	wg.Wait()
 
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
