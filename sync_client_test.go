@@ -49,7 +49,7 @@ func TestSyncWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
-	handler.async.Shutdown() //Stop loops
+	(handler.(*SyncClient)).async.shutdown() //Stop loops
 }
 
 func TestSyncRead(t *testing.T) {
@@ -66,13 +66,13 @@ func TestSyncRead(t *testing.T) {
 	handler, err := NewSyncClient(testWriter, readCloser, time.Duration(2*time.Second))
 	as.Nil(err)
 
-	m, err := handler.read(0)
+	m, err := (handler.(*SyncClient)).read(0)
 	as.Nil(err)
 	as.Equal(byte(0), m.Code)
 	as.Equal("name", m.Name)
 
 	as.Equal([]byte("anry"), m.Payload)
 
-	handler.async.Shutdown() //Stop loops
+	(handler.(*SyncClient)).async.shutdown() //Stop loops
 
 }

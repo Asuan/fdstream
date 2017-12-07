@@ -37,10 +37,10 @@ func Initialize() {
 	var (
 		err error
 	)
-
-	totalBytes = new(int64)
-	totalMessages = new(int64)
-	totalWait = new(int64)
+	var a, b, c int64
+	totalBytes = &a
+	totalMessages = &b
+	totalWait = &c
 	flag.BoolVar(&ctx.isSync, "sync", true, "mode of client")
 	flag.StringVar(&ctx.server, "server", "0.0.0.0:1900", "address of server")
 	//Profile
