@@ -7,13 +7,13 @@ import (
 	"sync/atomic"
 )
 
-const defaultQSize = 200 //Low q size decrise performance hits.
+const defaultQSize = 200
 
 var (
 	errNilMessage = errors.New("Nil message")
 )
 
-//Marshaler interface to pass custom object it is same with many *Marshal interfaces
+//Marshaller interface to pass custom object it is same with many *Marshal interfaces
 type Marshaler interface {
 	Marshal() ([]byte, error)
 }

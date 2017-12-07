@@ -27,8 +27,7 @@ type messageReceiver struct {
 }
 
 var (
-	errCommunicationError = errors.New("Communication is closed")
-	messageReceiverPool   = sync.Pool{
+	messageReceiverPool = sync.Pool{
 		New: func() interface{} {
 			return &messageReceiver{responce: make(chan *Message, 1)}
 		},
@@ -42,14 +41,13 @@ var (
 
 //SyncClient single goroutine client for sync read write to Async client
 type SyncClient struct {
-	*AsyncClient
+	async *AsyncClient
 	//Sync additional fields
 	defaultTimeout  time.Duration
 	counter         *uint32
 	awaitMessageQ   chan *messageReceiver
 	unknownMessage  map[uint32]*messageWithTimeout
 	messageToReturn map[uint32]*messageReceiver
-	kill            chan bool
 }
 
 //NewSyncClient create sync handler it have sync read from stream
@@ -60,13 +58,12 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	}
 
 	c := &SyncClient{
-		AsyncClient:     asyncClient,
 		unknownMessage:  make(map[uint32]*messageWithTimeout, defaultQSize),
 		messageToReturn: make(map[uint32]*messageReceiver, 5*defaultQSize),
 		awaitMessageQ:   make(chan *messageReceiver, defaultQSize),
 		counter:         new(uint32),
 		defaultTimeout:  timeout,
-		kill:            make(chan bool, 1),
+		async:           asyncClient,
 	}
 
 	go c.synchronizationWorker()
@@ -75,16 +72,17 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 
 func (sync *SyncClient) synchronizationWorker() {
 	var (
-		id  uint32
-		ok  bool
-		now int64
-		mwt *messageWithTimeout
-		mr  *messageReceiver
+		id          uint32
+		ok          bool
+		now         int64
+		mwt         *messageWithTimeout
+		mr          *messageReceiver
+		asyncClient = sync.async
 	)
 	janitorTicker := time.NewTicker(sync.defaultTimeout / 3)
 	defer janitorTicker.Stop()
-mainLoop:
-	for {
+
+	for asyncClient.IsAlive() {
 		select {
 		case <-janitorTicker.C: //cleanup old messages and responce waiters
 			now = time.Now().UnixNano()
@@ -114,7 +112,7 @@ mainLoop:
 			}
 			r.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
 			sync.messageToReturn[id] = r
-		case m := <-sync.toReadMessageQ: //read income messages
+		case m := <-asyncClient.toReadMessageQ: //read income messages
 			id = m.Id
 
 			if mr, ok = sync.messageToReturn[id]; ok {
@@ -126,11 +124,30 @@ mainLoop:
 			waitMessage.message = m
 			waitMessage.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
 			sync.unknownMessage[id] = waitMessage
-		case <-sync.kill:
-			break mainLoop
 		}
 	}
+}
 
+//Write message to destination with async way
+func (sync *SyncClient) Write(m *Message) error {
+	if m != nil {
+		sync.async.toSendMessageQ <- m
+	}
+	return errNilMessage
+}
+
+//WriteNamed write object to destination with async way
+func (sync *SyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
+	var b []byte
+	if b, err = m.Marshal(); err == nil {
+		return sync.Write(NewMessage(code, name, b))
+	}
+	return err
+}
+
+//WriteBytes bytes to destination with async way
+func (sync *SyncClient) WriteBytes(code byte, name string, payload []byte) error {
+	return sync.Write(NewMessage(code, name, payload))
 }
 
 //WriteAndReadResponce will write message and expect responce or error
@@ -138,15 +155,12 @@ func (sync *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if m == nil {
 		return nil, errNilMessage
 	}
-	if !sync.IsAlive() {
-		return nil, errCommunicationError
-	}
 
 	m.Id = atomic.AddUint32(sync.counter, 1)
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
-	sync.toSendMessageQ <- m
+	sync.async.toSendMessageQ <- m
 	return sync.read(m.Id)
 }
 
@@ -163,13 +177,7 @@ func (sync *SyncClient) read(id uint32) (*Message, error) {
 	return nil, errors.New(mes.Name)
 }
 
-func (sync *SyncClient) Shutdown() {
-	sync.AsyncClient.Shutdown()
-	close(sync.kill) //Stop sync worker
-}
-
-func (sync *SyncClient) Restore(outcome io.Writer, income io.ReadCloser) {
-	sync.AsyncClient.Restore(outcome, income)
-	sync.kill = make(chan bool, 1)
-	go sync.synchronizationWorker()
+//IsAlive indicate is communication is alive or dead
+func (sync *SyncClient) IsAlive() bool {
+	return sync.async.IsAlive()
 }
