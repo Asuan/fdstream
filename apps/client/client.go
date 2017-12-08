@@ -82,7 +82,7 @@ func main() {
 	conn.SetKeepAlive(true)
 
 	//Create new communication client with timeout for messages inside stream 2 second
-	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(2*time.Minute))
+	cl, err := fdstream.NewSyncClient(conn, conn, time.Duration(5*time.Second))
 	if err != nil {
 		logger.Printf("Could not create instance %v", err)
 	}
@@ -103,11 +103,11 @@ func main() {
 }
 
 //HandlerClient some test worker for communication
-func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
+func HandlerClient(cl *fdstream.SyncClient, instanceNum int) {
 	defer wg.Done()
 	var (
 		i                 int
-		totalSend         int
+		totalSendBytes    int
 		err               error
 		message, responce *fdstream.Message
 	)
@@ -120,7 +120,7 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		message = fdstream.NewMessage(0,
 			fmt.Sprintf("Client%d-M%d", instanceNum, i),
 			make([]byte, r*15, r*15))
-		totalSend += message.Len()
+		totalSendBytes += message.Len()
 		start := time.Now()
 		if responce, err = cl.WriteAndReadResponce(message); err == nil {
 			if responce.Name != message.Name {
@@ -134,7 +134,7 @@ func HandlerClient(cl fdstream.ClientSyncHander, instanceNum int) {
 		atomic.AddInt64(totalWait, int64(delta))
 	}
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
-	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSend)
-	atomic.AddInt64(totalBytes, int64(totalSend))
+	logger.Printf("Finish serving connection %d with total bytes send: %d", instanceNum, totalSendBytes)
+	atomic.AddInt64(totalBytes, int64(totalSendBytes))
 	atomic.AddInt64(totalMessages, int64(i))
 }

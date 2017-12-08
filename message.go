@@ -65,7 +65,7 @@ func NewMessage(code byte, name string, payload []byte) *Message {
 
 //Marshal marshal message to byte array with simple structure [code, id,name length, value length, name,value]
 func (m *Message) Marshal() ([]byte, error) {
-	buf := getBuf()
+	buf := bytes.NewBuffer(make([]byte, 0, m.Len())) //
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 
@@ -78,8 +78,7 @@ func (m *Message) Marshal() ([]byte, error) {
 	buf.Write(header[0:9])
 	buf.WriteString(m.Name)
 	buf.Write(m.Payload)
-	res := buf.Bytes() //TODO maybe copy instread
-	bufferPool.Put(buf)
+	res := buf.Bytes()
 	return res, nil
 }
 
@@ -106,12 +105,12 @@ func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 	//writer.Write(m.Payload)
 	//
 	n, err = writer.Write(buf.Bytes())
-	bufferPool.Put(buf)
+	bufferPool.Put(buf) //Since we already write data we can reuse buffer
 	return
 }
 
 //unmarshal create message from specified byte array or return error
-// for testing performance
+// for testing performance only
 func unmarshal(b []byte) (*Message, error) {
 	if len(b) < messageHeaderSize {
 		return nil, ErrTooShortMessage

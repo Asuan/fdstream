@@ -107,7 +107,7 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 		i   int
 		err error
 		wg  sync.WaitGroup
-		cl  fdstream.AsyncHandler
+		cl  *fdstream.AsyncClient
 	)
 	cl, err = fdstream.NewAsyncHandler(conn, conn)
 	if err != nil {
@@ -133,6 +133,7 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 			})
 		}
 		wg.Done()
+		logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	}
 
 	wg.Add(2)
@@ -140,6 +141,5 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 	go worker()
 	wg.Wait()
 
-	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
 	return nil
 }

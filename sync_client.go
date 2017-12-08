@@ -126,28 +126,32 @@ func (sync *SyncClient) synchronizationWorker() {
 			sync.unknownMessage[id] = waitMessage
 		}
 	}
+	for id, mr = range sync.messageToReturn { //fire timeout
+		mr.responce <- ErrMessageTimeout
+	}
+	for mr = range sync.awaitMessageQ {
+		mr.responce <- ErrMessageTimeout
+	}
 }
 
 //Write message to destination with async way
-func (sync *SyncClient) Write(m *Message) error {
-	if m != nil {
-		sync.async.toSendMessageQ <- m
-	}
-	return errNilMessage
+func (sync *SyncClient) Write(m *Message) {
+	sync.async.toSendMessageQ <- m
 }
 
 //WriteNamed write object to destination with async way
 func (sync *SyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
-		return sync.Write(NewMessage(code, name, b))
+		sync.Write(NewMessage(code, name, b))
+		return nil
 	}
 	return err
 }
 
 //WriteBytes bytes to destination with async way
-func (sync *SyncClient) WriteBytes(code byte, name string, payload []byte) error {
-	return sync.Write(NewMessage(code, name, payload))
+func (sync *SyncClient) WriteBytes(code byte, name string, payload []byte) {
+	sync.Write(NewMessage(code, name, payload))
 }
 
 //WriteAndReadResponce will write message and expect responce or error

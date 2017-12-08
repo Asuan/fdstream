@@ -18,12 +18,6 @@ type Marshaler interface {
 	Marshal() ([]byte, error)
 }
 
-type AsyncWriter interface {
-	Write(*Message) error
-	WriteNamed(code byte, name string, object Marshaler) error
-	WriteBytes(code byte, name string, payload []byte) error
-}
-
 type AsyncClient struct {
 	OutputStream   io.Writer
 	InputStream    io.ReadCloser
@@ -135,12 +129,8 @@ mainLoop:
 
 //Write will write message to destination
 //The function is thread safe
-func (c *AsyncClient) Write(m *Message) error {
-	if m != nil {
-		c.toSendMessageQ <- m
-		return nil
-	}
-	return errNilMessage
+func (c *AsyncClient) Write(m *Message) {
+	c.toSendMessageQ <- m
 }
 
 //WriteNamed will write marshalable object to destination
@@ -148,7 +138,8 @@ func (c *AsyncClient) Write(m *Message) error {
 func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
 	var b []byte
 	if b, err = m.Marshal(); err == nil {
-		return c.Write(NewMessage(code, name, b))
+		c.Write(NewMessage(code, name, b))
+		return nil
 	}
 	return err
 
@@ -156,8 +147,9 @@ func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaler) (err error
 
 //WriteBytes will write bytes to destination
 //The function is thread safe
-func (c *AsyncClient) WriteBytes(code byte, name string, payload []byte) (err error) {
-	return c.Write(NewMessage(code, name, payload))
+func (c *AsyncClient) WriteBytes(code byte, name string, payload []byte) {
+	c.Write(NewMessage(code, name, payload))
+
 }
 
 //Read message read message from internal chan
@@ -191,10 +183,10 @@ func (c *AsyncClient) Restore(outcome io.Writer, income io.ReadCloser) {
 			c.InputStream = income
 			c.OutputStream = outcome
 			c.kill = make(chan bool, 1)
+			c.alive.Store(true)
 			go c.workerReader(c.toReadMessageQ)
 			go c.workerWriter(c.toSendMessageQ)
 
-			c.alive.Store(true)
 		})
 	}
 }
