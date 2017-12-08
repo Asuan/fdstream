@@ -58,8 +58,8 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 	}
 
 	c := &SyncClient{
-		unknownMessage:  make(map[uint32]*messageWithTimeout, defaultQSize),
-		messageToReturn: make(map[uint32]*messageReceiver, 5*defaultQSize),
+		unknownMessage:  make(map[uint32]*messageWithTimeout, 10*defaultQSize),
+		messageToReturn: make(map[uint32]*messageReceiver, 20*defaultQSize),
 		awaitMessageQ:   make(chan *messageReceiver, defaultQSize),
 		counter:         new(uint32),
 		defaultTimeout:  timeout,
