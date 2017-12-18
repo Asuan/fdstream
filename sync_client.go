@@ -52,7 +52,7 @@ type SyncClient struct {
 
 //NewSyncClient create sync handler it have sync read from stream
 func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Duration) (*SyncClient, error) {
-	asyncClient, err := NewAsyncHandler(outcome, income)
+	asyncClient, err := NewAsyncClient(outcome, income)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (sync *SyncClient) synchronizationWorker() {
 			}
 			r.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
 			sync.messageToReturn[id] = r
-		case m := <-asyncClient.toReadMessageQ: //read income messages
+		case m := <-asyncClient.ToReadQ: //read income messages
 			id = m.Id
 
 			if mr, ok = sync.messageToReturn[id]; ok {
@@ -136,7 +136,7 @@ func (sync *SyncClient) synchronizationWorker() {
 
 //Write message to destination with async way
 func (sync *SyncClient) Write(m *Message) {
-	sync.async.toSendMessageQ <- m
+	sync.async.ToSendQ <- m
 }
 
 //WriteNamed write object to destination with async way
@@ -164,7 +164,7 @@ func (sync *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
-	sync.async.toSendMessageQ <- m
+	sync.async.ToSendQ <- m
 	return sync.read(m.Id)
 }
 

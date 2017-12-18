@@ -45,7 +45,7 @@ func Initialize() {
 	//logger = log.New(ioutil.Discard, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 	logger = log.New(os.Stdout, "", log.Ldate|log.Ltime|log.Lmicroseconds|log.Lshortfile)
 
-	//profile
+	//Profile
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
@@ -55,7 +55,6 @@ func Initialize() {
 		}
 		os.Exit(0)
 	}()
-	//Profile
 	if cpuprofile != "" {
 		f, err := os.Create(cpuprofile)
 		if err != nil {
@@ -94,7 +93,6 @@ func main() {
 	}
 
 	logger.Printf("Stop server server")
-
 }
 
 //HandleTCP handle messages
@@ -109,7 +107,7 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 		wg  sync.WaitGroup
 		cl  *fdstream.AsyncClient
 	)
-	cl, err = fdstream.NewAsyncHandler(conn, conn)
+	cl, err = fdstream.NewAsyncClient(conn, conn)
 	if err != nil {
 		return err
 	}
@@ -123,14 +121,13 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 		for cl.IsAlive() {
 			i++
 			backPayload = []byte(fmt.Sprintf("Responce I-%d-#%d", instanceNum, i))
-			message = cl.Read() //It is thread safe to read and write
+			message = <-cl.ToReadQ //It is thread safe to read and write
 			logger.Printf("Get message %s", message.Name)
-
-			cl.Write(&fdstream.Message{
+			cl.ToSendQ <- &fdstream.Message{
 				Id:      message.Id,   //It is need for sync communication
 				Name:    message.Name, //Same name for validating
 				Payload: backPayload,
-			})
+			}
 		}
 		wg.Done()
 		logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)

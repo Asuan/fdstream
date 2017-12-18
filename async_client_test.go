@@ -61,7 +61,7 @@ func TestWrite(t *testing.T) {
 	testWriter := &TestWriteCloser{
 		m: map[int][]byte{},
 	}
-	handler, err := NewAsyncHandler(testWriter, readCloser)
+	handler, err := NewAsyncClient(testWriter, readCloser)
 	as.Nil(err)
 
 	testMessages := [10]*Message{}
@@ -105,7 +105,7 @@ func TestRead(t *testing.T) {
 	testWriter := &TestWriteCloser{
 		m: map[int][]byte{},
 	}
-	handler, err := NewAsyncHandler(testWriter, readCloser)
+	handler, err := NewAsyncClient(testWriter, readCloser)
 	as.Nil(err)
 
 	m := handler.Read()
@@ -128,7 +128,7 @@ func TestRestore(t *testing.T) {
 	testWriter := &TestWriteCloser{
 		m: map[int][]byte{},
 	}
-	handler, err := NewAsyncHandler(testWriter, readCloser)
+	handler, err := NewAsyncClient(testWriter, readCloser)
 	as.Nil(err)
 	as.True(handler.IsAlive())
 	m := handler.Read()

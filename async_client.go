@@ -19,31 +19,31 @@ type Marshaler interface {
 }
 
 type AsyncClient struct {
-	OutputStream   io.Writer
-	InputStream    io.ReadCloser
-	toSendMessageQ chan *Message //Queue to send to remote
-	toReadMessageQ chan *Message //Queue to read message
-	killer         *sync.Once
-	restorer       *sync.Once
-	kill           chan bool
-	alive          atomic.Value
+	OutputStream io.Writer
+	InputStream  io.ReadCloser
+	ToSendQ      chan *Message //Queue to send to remote
+	ToReadQ      chan *Message //Queue to read message
+	killer       *sync.Once
+	restorer     *sync.Once
+	kill         chan bool
+	alive        atomic.Value
 }
 
-//NewAsyncHandler create async handler
-func NewAsyncHandler(outcome io.Writer, income io.ReadCloser) (*AsyncClient, error) {
+//NewAsyncClient create async handler
+func NewAsyncClient(outcome io.Writer, income io.ReadCloser) (*AsyncClient, error) {
 	c := &AsyncClient{
-		OutputStream:   outcome,
-		InputStream:    income,
-		toSendMessageQ: make(chan *Message, defaultQSize),
-		toReadMessageQ: make(chan *Message, defaultQSize),
-		kill:           make(chan bool, 1),
-		killer:         new(sync.Once),
-		restorer:       new(sync.Once),
+		OutputStream: outcome,
+		InputStream:  income,
+		ToSendQ:      make(chan *Message, defaultQSize),
+		ToReadQ:      make(chan *Message, defaultQSize),
+		kill:         make(chan bool, 1),
+		killer:       new(sync.Once),
+		restorer:     new(sync.Once),
 	}
 	c.alive.Store(true)
 
-	go c.workerReader(c.toReadMessageQ)
-	go c.workerWriter(c.toSendMessageQ)
+	go c.workerReader(c.ToReadQ)
+	go c.workerWriter(c.ToSendQ)
 	return c, nil
 }
 
@@ -130,7 +130,7 @@ mainLoop:
 //Write will write message to destination
 //The function is thread safe
 func (c *AsyncClient) Write(m *Message) {
-	c.toSendMessageQ <- m
+	c.ToSendQ <- m
 }
 
 //WriteNamed will write marshalable object to destination
@@ -155,7 +155,7 @@ func (c *AsyncClient) WriteBytes(code byte, name string, payload []byte) {
 //Read message read message from internal chan
 //The function is thread safe
 func (c *AsyncClient) Read() *Message {
-	return <-c.toReadMessageQ
+	return <-c.ToReadQ
 }
 
 //Shutdown close  read but save un-readed or un-writhed data.
@@ -184,8 +184,8 @@ func (c *AsyncClient) Restore(outcome io.Writer, income io.ReadCloser) {
 			c.OutputStream = outcome
 			c.kill = make(chan bool, 1)
 			c.alive.Store(true)
-			go c.workerReader(c.toReadMessageQ)
-			go c.workerWriter(c.toSendMessageQ)
+			go c.workerReader(c.ToReadQ)
+			go c.workerWriter(c.ToSendQ)
 
 		})
 	}

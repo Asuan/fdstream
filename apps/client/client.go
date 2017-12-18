@@ -124,13 +124,14 @@ func HandlerClient(cl *fdstream.SyncClient, instanceNum int) {
 		start := time.Now()
 		if responce, err = cl.WriteAndReadResponce(message); err == nil {
 			if responce.Name != message.Name {
-				logger.Printf("Wrong responce client %d %dmessage %s want: %s", instanceNum, i, string(message.Name), string(responce.Name))
+				logger.Printf("Wrong responce client %d %d-message %s want: %s", instanceNum, i, string(message.Name), string(responce.Name))
 			}
 		} else {
-			logger.Printf("Error in responce client %d %dmessage %v", instanceNum, i, err)
+			logger.Printf("Error in responce client %d %d-message %v", instanceNum, i, err)
 		}
 		delta := time.Now().Sub(start)
-		logger.Printf("Wait responce during %v client %d %dmessage", delta, instanceNum, i)
+		logger.Printf("Wait responce during %v client %d %d-message", delta, instanceNum, i)
+		totalSendBytes += responce.Len()
 		atomic.AddInt64(totalWait, int64(delta))
 	}
 	logger.Printf("Finish serving connection %d with total messages count: %d", instanceNum, i)
