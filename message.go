@@ -5,7 +5,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"reflect"
 	"sync"
+	"unsafe"
 )
 
 //TODO support longer mesages
@@ -136,7 +138,7 @@ func unmarshal(b []byte) (*Message, error) {
 
 	//Cursor is same name len for now
 	if cursor > 0 {
-		m.Name = string(b[messageHeaderSize : messageHeaderSize+cursor])
+		m.Name = dirtyString(b[messageHeaderSize : messageHeaderSize+cursor])
 	}
 	cursor += messageHeaderSize
 
@@ -145,6 +147,16 @@ func unmarshal(b []byte) (*Message, error) {
 	}
 	return m, nil
 
+}
+
+//C like function
+// do not use unless you understand its consequences
+func dirtyString(b []byte) (s string) {
+	pbytes := (*reflect.SliceHeader)(unsafe.Pointer(&b))
+	pstring := (*reflect.StringHeader)(unsafe.Pointer(&s))
+	pstring.Data = pbytes.Data
+	pstring.Len = pbytes.Len
+	return
 }
 
 //unmarshalHeader is unsafe read expect at least 11 bytes length
