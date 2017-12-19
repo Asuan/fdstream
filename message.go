@@ -113,27 +113,25 @@ func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
 
 //unmarshal create message from specified byte array or return error
 // for testing performance only
-func unmarshal(b []byte) (*Message, error) {
+func unmarshal(b []byte) (m Message, err error) {
 	if len(b) < messageHeaderSize {
-		return nil, ErrTooShortMessage
+		return m, ErrTooShortMessage
 	}
 
 	var (
 		code               byte
-		m                  *Message
 		cursor, payloadLen uint16
 		ID                 uint32
 	)
 
 	code, ID, cursor, payloadLen = unmarshalHeader(b)
-	m = &Message{
-		Code:    code,
-		Id:      ID,
-		Payload: make([]byte, payloadLen, payloadLen), //This line slowdown Unmarshal by 2-3 times
-	}
+	m.Code = code
+	m.Id = ID
+	m.Payload = make([]byte, payloadLen, payloadLen)
 
 	if len(b) != int(messageHeaderSize+cursor+payloadLen) {
-		return nil, ErrBinaryLength
+		err = ErrBinaryLength
+		return
 	}
 
 	//Cursor is same name len for now
@@ -145,7 +143,7 @@ func unmarshal(b []byte) (*Message, error) {
 	if payloadLen > 0 {
 		copy(m.Payload, b[cursor:cursor+payloadLen])
 	}
-	return m, nil
+	return
 
 }
 

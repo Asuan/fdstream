@@ -11,14 +11,14 @@ func Test_unmarshal(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []byte
-		want    *Message
+		want    Message
 		wantErr bool
 	}{
 		{
 			name:    "Simple correct message",
 			args:    append([]byte{0x0, 0, 0, 0, 0, 0x0, 5, 0x0, 5}, []byte(`name1value`)...),
 			wantErr: false,
-			want: &Message{
+			want: Message{
 				Name:    "name1",
 				Payload: []byte("value"),
 			},
@@ -26,7 +26,7 @@ func Test_unmarshal(t *testing.T) {
 			name:    "Simple message with no value",
 			args:    append([]byte{0x0, 0, 0, 0, 0, 0x0, 5, 0x0, 0}, []byte(`name1`)...),
 			wantErr: false,
-			want: &Message{
+			want: Message{
 				Name:    "name1",
 				Payload: []byte{},
 			},
@@ -34,7 +34,7 @@ func Test_unmarshal(t *testing.T) {
 			name:    "Simple message with no name",
 			args:    append([]byte{0x0, 0, 0, 0, 0, 0x0, 0, 0x0, 6}, []byte(`Value1`)...),
 			wantErr: false,
-			want: &Message{
+			want: Message{
 				Name:    "",
 				Payload: []byte("Value1"),
 			},
