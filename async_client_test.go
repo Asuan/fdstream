@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io/ioutil"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,16 +14,20 @@ import (
 type TestWriteCloser struct {
 	counter int
 	m       map[int][]byte
+	l       sync.Mutex
 }
 
 type TestReaderWaiter struct {
 	data []byte
 	i    int
 	d    time.Duration
+	l    sync.Mutex
 }
 
 func (t *TestReaderWaiter) Read(b []byte) (int, error) {
 	time.Sleep(t.d)
+	t.l.Lock()
+	defer t.l.Unlock()
 	if t.data != nil {
 		begin := t.i
 
@@ -43,8 +48,11 @@ func (t *TestReaderWaiter) Close() error {
 }
 
 func (t *TestWriteCloser) Write(v []byte) (int, error) {
-	t.counter++
-	return ioutil.Discard.Write(v)
+	t.l.Lock()
+	defer t.l.Unlock()
+	n, err := ioutil.Discard.Write(v)
+	t.counter += n
+	return n, err
 }
 
 func (t *TestWriteCloser) Close() error {
@@ -79,8 +87,11 @@ func TestWrite(t *testing.T) {
 			handler.WriteNamed(byte(i), "ota", m)
 		}
 	}
-	time.Sleep(100 * time.Microsecond)
-	as.Equal(10, testWriter.counter)
+	time.Sleep(200 * time.Microsecond) // wait for data to be sanded
+	testWriter.l.Lock()
+	defer testWriter.l.Unlock()
+	as.Equal(260, testWriter.counter)
+
 	for _, receiveMessages := range testWriter.m {
 		exist := false
 		for _, s := range testMessages {
@@ -115,50 +126,4 @@ func TestRead(t *testing.T) {
 	as.Equal([]byte("anry"), m.Payload)
 
 	handler.Shutdown()
-}
-
-func TestRestore(t *testing.T) {
-	as := assert.New(t)
-	data, _ := (&Message{"name", 0, byte(0), []byte("anry")}).Marshal()
-	readCloser := &TestReaderWaiter{
-		data: data,
-		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
-	}
-
-	testWriter := &TestWriteCloser{
-		m: map[int][]byte{},
-	}
-	handler, err := NewAsyncClient(testWriter, readCloser)
-	as.Nil(err)
-	as.True(handler.IsAlive())
-	m := handler.Read()
-	as.Equal(byte(0), m.Code)
-	as.Equal("name", m.Name)
-
-	as.Equal([]byte("anry"), m.Payload)
-
-	handler.Shutdown()
-	as.False(handler.IsAlive())
-
-	//Restore and read again
-	data, _ = (&Message{"name", 0, byte(0), []byte("anry")}).Marshal()
-	readCloser2 := &TestReaderWaiter{
-		data: data,
-		d:    time.Duration(200 * time.Millisecond), //Wait reader for test writer
-	}
-
-	testWriter2 := &TestWriteCloser{
-		m: map[int][]byte{},
-	}
-	handler.Restore(testWriter2, readCloser2)
-	as.True(handler.IsAlive())
-
-	m2 := handler.Read()
-	as.Equal(byte(0), m2.Code)
-	as.Equal("name", m2.Name)
-
-	as.Equal([]byte("anry"), m.Payload)
-
-	handler.Shutdown()
-	as.False(handler.IsAlive())
 }

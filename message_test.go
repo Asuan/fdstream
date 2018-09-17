@@ -105,7 +105,7 @@ func Test_marshal(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := &Message{
 				Code:    tt.fields.Action,
-				Id:      0,
+				ID:      0,
 				Name:    tt.fields.Name,
 				Payload: tt.fields.Value,
 			}

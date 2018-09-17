@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-//TODO support longer mesages
+//TODO support longer messages
 
 //Max size of message
 const (
@@ -19,7 +19,7 @@ const (
 	erMissRoutingCode      byte = 254
 	erGeneralErrorCode     byte = 255
 	erTimeoutCode          byte = 253
-	erDuplicateIdErrorCode byte = 252
+	erDuplicateIDErrorCode byte = 252
 )
 
 var (
@@ -36,8 +36,8 @@ type Message struct {
 	//Name of message, some metadata about payload
 	// it is optional
 	Name string
-	//Id is optional for async but mandatary for sync communication to get correct responce by Id
-	Id uint32
+	//ID is optional for async but mandatary for sync communication to get correct responce by ID
+	ID uint32
 	//Code is an a flag of somebody, fill free to use flag < 200
 	// Code with value more than 200 mean some error or problem
 	Code byte
@@ -73,7 +73,7 @@ func (m *Message) Marshal() ([]byte, error) {
 
 	var header [messageHeaderSize]byte
 	header[0] = m.Code
-	binary.BigEndian.PutUint32(header[1:5], m.Id)
+	binary.BigEndian.PutUint32(header[1:5], m.ID)
 	binary.BigEndian.PutUint16(header[5:7], uintNamelen)
 	binary.BigEndian.PutUint16(header[7:9], uintValueLen)
 
@@ -85,30 +85,27 @@ func (m *Message) Marshal() ([]byte, error) {
 }
 
 //WriteTo implements io.WriteTo interface to write directly to io.Writer
-func (m *Message) WriteTo(writer io.Writer) (n int, err error) {
+func (m *Message) WriteTo(writer io.Writer) (int64, error) {
 	buf := getBuf()
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
 
 	var header [messageHeaderSize]byte
 	header[0] = m.Code
-	binary.BigEndian.PutUint32(header[1:5], m.Id)
+	binary.BigEndian.PutUint32(header[1:5], m.ID)
 	binary.BigEndian.PutUint16(header[5:7], uintNamelen)
 	binary.BigEndian.PutUint16(header[7:9], uintValueLen)
 
 	buf.Write(header[0:9])
 	buf.WriteString(m.Name)
-	buf.Write(m.Payload)
 
-	//This is dangerous operation: we loose thread safe writing ability
-	//Commented code faster but not not thread safe
-	//writer.Write(header)
-	//writer.Write([]byte(m.Name))
-	//writer.Write(m.Payload)
-	//
-	n, err = writer.Write(buf.Bytes())
+	n1, err := writer.Write(buf.Bytes())
+	if err != nil {
+		return int64(n1), err
+	}
+	n2, err := writer.Write(m.Payload)
 	bufferPool.Put(buf) //Since we already write data we can reuse buffer
-	return
+	return int64(n1 + n2), err
 }
 
 //unmarshal create message from specified byte array or return error
@@ -126,7 +123,7 @@ func unmarshal(b []byte) (m Message, err error) {
 
 	code, ID, cursor, payloadLen = unmarshalHeader(b)
 	m.Code = code
-	m.Id = ID
+	m.ID = ID
 	m.Payload = make([]byte, payloadLen, payloadLen)
 
 	if len(b) != int(messageHeaderSize+cursor+payloadLen) {

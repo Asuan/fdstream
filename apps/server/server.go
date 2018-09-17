@@ -124,7 +124,7 @@ func HandleTCP(conn *net.TCPConn, instanceNum int) error {
 			message = <-cl.ToReadQ //It is thread safe to read and write
 			logger.Printf("Get message %s", message.Name)
 			cl.ToSendQ <- &fdstream.Message{
-				Id:      message.Id,   //It is need for sync communication
+				ID:      message.ID,   //It is need for sync communication
 				Name:    message.Name, //Same name for validating
 				Payload: backPayload,
 			}

@@ -13,18 +13,18 @@ var (
 	errNilMessage = errors.New("Nil message")
 )
 
-//Marshaller interface to pass custom object it is same with many *Marshal interfaces
+//Marshaler interface to pass custom object it is same with many *Marshal* interfaces
 type Marshaler interface {
 	Marshal() ([]byte, error)
 }
 
+// AsyncClient is an struct for async send receiving data via TCP like connection
 type AsyncClient struct {
 	OutputStream io.Writer
 	InputStream  io.ReadCloser
 	ToSendQ      chan *Message //Queue to send to remote
 	ToReadQ      chan *Message //Queue to read message
 	killer       *sync.Once
-	restorer     *sync.Once
 	kill         chan bool
 	alive        atomic.Value
 }
@@ -38,7 +38,6 @@ func NewAsyncClient(outcome io.Writer, income io.ReadCloser) (*AsyncClient, erro
 		ToReadQ:      make(chan *Message, defaultQSize),
 		kill:         make(chan bool, 1),
 		killer:       new(sync.Once),
-		restorer:     new(sync.Once),
 	}
 	c.alive.Store(true)
 
@@ -78,7 +77,7 @@ func (c *AsyncClient) workerReader(outcome chan<- *Message) {
 		code, id, cursor, lenP = unmarshalHeader(header)
 		m := &Message{
 			Code: code,
-			Id:   id,
+			ID:   id,
 
 			//This is so slow operation but we should copy data from messageBody buffer
 			Payload: make([]byte, lenP, lenP),
@@ -164,8 +163,6 @@ func (c *AsyncClient) Shutdown() {
 	c.killer.Do(func() {
 		close(c.kill)         //It should stop writer
 		c.InputStream.Close() //We should notify all 3d writes about trouble.
-
-		c.restorer = new(sync.Once) //To keep way to restore
 	})
 	c.alive.Store(false)
 }
@@ -173,20 +170,4 @@ func (c *AsyncClient) Shutdown() {
 //IsAlive notify about state of async client
 func (c *AsyncClient) IsAlive() bool {
 	return c.alive.Load().(bool)
-}
-
-//Restore restore after client after killing
-func (c *AsyncClient) Restore(outcome io.Writer, income io.ReadCloser) {
-	if !c.IsAlive() {
-		c.restorer.Do(func() {
-			c.killer = new(sync.Once)
-			c.InputStream = income
-			c.OutputStream = outcome
-			c.kill = make(chan bool, 1)
-			c.alive.Store(true)
-			go c.workerReader(c.ToReadQ)
-			go c.workerWriter(c.ToSendQ)
-
-		})
-	}
 }

@@ -38,7 +38,9 @@ func TestSyncWrite(t *testing.T) {
 		}
 	}
 	time.Sleep(400 * time.Microsecond)
-	as.Equal(10, testWriter.counter)
+	testWriter.l.Lock()
+	defer testWriter.l.Unlock()
+	as.Equal(260, testWriter.counter)
 	for _, reciaveMessages := range testWriter.m {
 		exist := false
 		for _, sended := range testMessages {

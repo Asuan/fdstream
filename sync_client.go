@@ -12,7 +12,7 @@ var (
 	//ErrMessageTimeout indicate wait timeout appear
 	ErrMessageTimeout = &Message{Code: erTimeoutCode, Name: "Timeout on waiting message"}
 	//ErrMessageDuplicateID indicate sync client already wait message with same name
-	ErrMessageDuplicateID = &Message{Code: erDuplicateIdErrorCode, Name: "Message with same id already wait response"}
+	ErrMessageDuplicateID = &Message{Code: erDuplicateIDErrorCode, Name: "Message with same id already wait response"}
 )
 
 type messageWithTimeout struct {
@@ -113,7 +113,7 @@ func (sync *SyncClient) synchronizationWorker() {
 			r.timeout = time.Now().Add(sync.defaultTimeout).UnixNano()
 			sync.messageToReturn[id] = r
 		case m := <-asyncClient.ToReadQ: //read income messages
-			id = m.Id
+			id = m.ID
 
 			if mr, ok = sync.messageToReturn[id]; ok {
 				mr.responce <- m
@@ -160,12 +160,12 @@ func (sync *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 		return nil, errNilMessage
 	}
 
-	m.Id = atomic.AddUint32(sync.counter, 1)
+	m.ID = atomic.AddUint32(sync.counter, 1)
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
 	sync.async.ToSendQ <- m
-	return sync.read(m.Id)
+	return sync.read(m.ID)
 }
 
 //read is 'wait and read' message by specified id
