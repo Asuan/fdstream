@@ -98,14 +98,12 @@ func (m *Message) WriteTo(writer io.Writer) (int64, error) {
 
 	buf.Write(header[0:9])
 	buf.WriteString(m.Name)
+	buf.Write(m.Payload)
 
-	n1, err := writer.Write(buf.Bytes())
-	if err != nil {
-		return int64(n1), err
-	}
-	n2, err := writer.Write(m.Payload)
-	bufferPool.Put(buf) //Since we already write data we can reuse buffer
-	return int64(n1 + n2), err
+	n, err := buf.WriteTo(writer)
+	bufferPool.Put(buf)
+
+	return n, err
 }
 
 //unmarshal create message from specified byte array or return error
@@ -165,5 +163,8 @@ func unmarshalHeader(b []byte) (code byte, id uint32, nameLen, payloadLen uint16
 
 //Len calculate current length of message in bytes
 func (m *Message) Len() int {
-	return messageHeaderSize + len(m.Name) + len(m.Payload)
+	if m != nil {
+		return messageHeaderSize + len(m.Name) + len(m.Payload)
+	}
+	return 0
 }
