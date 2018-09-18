@@ -50,17 +50,16 @@ func NewAsyncClient(outcome io.Writer, income io.ReadCloser) (*AsyncClient, erro
 //Read message by message from input reader
 func (c *AsyncClient) workerReader(outcome chan<- *Message) {
 	var (
-		err         error
-		n           int
-		lenB        int //full length of body without header
-		lenP        uint16
-		cursor      uint16
-		id          uint32
-		code        byte
-		eof         bool
-		header      = make([]byte, messageHeaderSize, messageHeaderSize)
-		messageBody = make([]byte, MaxMessageSize, MaxMessageSize)
-		reader      = bufio.NewReaderSize(c.InputStream, MaxMessageSize*5)
+		err    error
+		n      int
+		lenB   int
+		lenP   uint16
+		cursor uint16
+		id     uint32
+		code   byte
+		eof    bool
+		header = make([]byte, messageHeaderSize, messageHeaderSize)
+		reader = bufio.NewReaderSize(c.InputStream, MaxMessageSize*5)
 	)
 
 	for !eof {
@@ -84,23 +83,23 @@ func (c *AsyncClient) workerReader(outcome chan<- *Message) {
 			//This is so slow operation but we should copy data from messageBody buffer
 			Payload: make([]byte, lenP, lenP),
 		}
-		messageBody = messageBody[:(cursor + lenP)]
 
-		lenB, err = reader.Read(messageBody)
+		name := make([]byte, cursor, cursor)
+		lenB, err = reader.Read(name)
 		if err != nil {
 			//try read last message if EOF appear
-			if err != io.EOF || lenB != len(messageBody) {
+			if err != io.EOF || lenB != int(cursor+lenP) {
 				break
 			}
 			eof = true
 		}
 
 		if cursor > 0 {
-			m.Name = string(messageBody[0:cursor])
+			m.Name = dirtyString(name) //avoid data copy
 		}
 
 		if lenP > 0 {
-			copy(m.Payload, messageBody[cursor:cursor+lenP])
+			reader.Read(m.Payload)
 		}
 
 		outcome <- m
@@ -122,14 +121,9 @@ mainLoop:
 		case <-c.kill:
 			break mainLoop
 		case m = <-income:
-			//i++
 			if _, err = m.WriteTo(c.OutputStream); err != nil {
 				break mainLoop
 			}
-			//if i == 5 {
-			//	buf.Flush()
-			//	i = 0
-			//}
 		}
 	}
 	c.Shutdown()
@@ -138,7 +132,7 @@ mainLoop:
 //Write will write message to destination
 //The function is thread safe
 func (c *AsyncClient) Write(m *Message) {
-	c.ToSendQ <- m
+	m.WriteTo(c.OutputStream)
 }
 
 //WriteNamed will write marshalable object to destination

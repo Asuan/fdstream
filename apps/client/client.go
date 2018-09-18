@@ -114,7 +114,7 @@ func HandlerClient(cl *fdstream.SyncClient, instanceNum int) {
 	for cl.IsAlive() {
 		i++
 		r := rand.Intn(100)
-		time.Sleep(time.Duration(r) * time.Millisecond)
+		//	time.Sleep(time.Duration(r) * time.Millisecond) //limit mode
 
 		//create message with unique name for sending data and waiting responce by specified name
 		message = fdstream.NewMessage(0,
