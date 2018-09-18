@@ -137,28 +137,13 @@ func (sync *SyncClient) synchronizationWorker() {
 	}
 }
 
-//WriteNamed write object to destination with async way
-func (sync *SyncClient) WriteNamed(code byte, name string, m Marshaler) (err error) {
-	var b []byte
-	if b, err = m.Marshal(); err == nil {
-		sync.Write(NewMessage(code, name, b))
-		return nil
-	}
-	return err
-}
-
-//WriteBytes bytes to destination with async way
-func (sync *SyncClient) WriteBytes(code byte, name string, payload []byte) {
-	sync.Write(NewMessage(code, name, payload))
-}
-
 //WriteAndReadResponce will write message and expect responce or error
 func (sync *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if m == nil {
 		return nil, errNilMessage
 	}
 
-	m.ID = atomic.AddUint32(sync.counter, 1)
+	m.ID = atomic.AddUint32(sync.counter, 1) // need some way for uniq ID (concurent with another clients)
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
