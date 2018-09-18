@@ -16,3 +16,10 @@ It is a way to send data and expect response.
 
 Sync detect message by id *Message.id*
 
+## Performance
+
+Sync + async clinet have (apps/client + apps/server) have statistics:
+
+* Data rate: 101983271.05
+* Hits: 126047.62
+* Average wait: 1.288ms
