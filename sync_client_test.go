@@ -51,7 +51,7 @@ func TestSyncWrite(t *testing.T) {
 		}
 		as.True(exist)
 	}
-	handler.async.Shutdown() //Stop loops
+	handler.Shutdown() //Stop loops
 }
 
 func TestSyncRead(t *testing.T) {
@@ -75,6 +75,6 @@ func TestSyncRead(t *testing.T) {
 
 	as.Equal([]byte("anry"), m.Payload)
 
-	handler.async.Shutdown() //Stop loops
+	handler.Shutdown() //Stop loops
 
 }

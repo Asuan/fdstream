@@ -50,7 +50,6 @@ var bufferPool = sync.Pool{}
 func getBuf() *bytes.Buffer {
 	if b := bufferPool.Get(); b != nil {
 		buf := b.(*bytes.Buffer)
-		buf.Reset()
 		return buf
 	}
 	return bytes.NewBuffer(make([]byte, 0, MaxMessageSize))
@@ -85,7 +84,7 @@ func (m *Message) Marshal() ([]byte, error) {
 }
 
 //WriteTo implements io.WriteTo interface to write directly to io.Writer
-func (m *Message) WriteTo(writer io.Writer) (int64, error) {
+func (m *Message) WriteTo(writer io.Writer) (n int64, err error) {
 	buf := getBuf()
 	uintNamelen := uint16(len(m.Name))
 	uintValueLen := uint16(len(m.Payload))
@@ -100,7 +99,7 @@ func (m *Message) WriteTo(writer io.Writer) (int64, error) {
 	buf.WriteString(m.Name)
 	buf.Write(m.Payload)
 
-	n, err := buf.WriteTo(writer)
+	n, err = buf.WriteTo(writer)
 	bufferPool.Put(buf)
 
 	return n, err

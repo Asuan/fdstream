@@ -1,6 +1,7 @@
 package fdstream
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"sync"
@@ -59,10 +60,11 @@ func (c *AsyncClient) workerReader(outcome chan<- *Message) {
 		eof         bool
 		header      = make([]byte, messageHeaderSize, messageHeaderSize)
 		messageBody = make([]byte, MaxMessageSize, MaxMessageSize)
+		reader      = bufio.NewReaderSize(c.InputStream, MaxMessageSize*5)
 	)
 
 	for !eof {
-		n, err = c.InputStream.Read(header)
+		n, err = reader.Read(header)
 		if err != nil {
 			break //If we get error so looks like no way to continue
 		}
@@ -84,7 +86,7 @@ func (c *AsyncClient) workerReader(outcome chan<- *Message) {
 		}
 		messageBody = messageBody[:(cursor + lenP)]
 
-		lenB, err = c.InputStream.Read(messageBody)
+		lenB, err = reader.Read(messageBody)
 		if err != nil {
 			//try read last message if EOF appear
 			if err != io.EOF || lenB != len(messageBody) {
@@ -111,6 +113,8 @@ func (c *AsyncClient) workerWriter(income <-chan *Message) {
 	var (
 		err error
 		m   *Message
+		//buf = bufio.NewWriterSize(c.OutputStream, MaxMessageSize*5)
+		//i int
 	)
 mainLoop:
 	for {
@@ -118,9 +122,14 @@ mainLoop:
 		case <-c.kill:
 			break mainLoop
 		case m = <-income:
+			//i++
 			if _, err = m.WriteTo(c.OutputStream); err != nil {
 				break mainLoop
 			}
+			//if i == 5 {
+			//	buf.Flush()
+			//	i = 0
+			//}
 		}
 	}
 	c.Shutdown()
@@ -148,7 +157,6 @@ func (c *AsyncClient) WriteNamed(code byte, name string, m Marshaler) (err error
 //The function is thread safe
 func (c *AsyncClient) WriteBytes(code byte, name string, payload []byte) {
 	c.Write(NewMessage(code, name, payload))
-
 }
 
 //Read message read message from internal chan

@@ -41,7 +41,7 @@ var (
 
 //SyncClient single goroutine client for sync read write to Async client
 type SyncClient struct {
-	async *AsyncClient
+	*AsyncClient
 	//Sync additional fields
 	defaultTimeout  time.Duration
 	counter         *uint32
@@ -63,7 +63,7 @@ func NewSyncClient(outcome io.WriteCloser, income io.ReadCloser, timeout time.Du
 		awaitMessageQ:   make(chan *messageReceiver, defaultQSize),
 		counter:         new(uint32),
 		defaultTimeout:  timeout,
-		async:           asyncClient,
+		AsyncClient:     asyncClient,
 	}
 
 	go c.synchronizationWorker()
@@ -77,7 +77,7 @@ func (sync *SyncClient) synchronizationWorker() {
 		now         int64
 		mwt         *messageWithTimeout
 		mr          *messageReceiver
-		asyncClient = sync.async
+		asyncClient = sync.AsyncClient
 	)
 	janitorTicker := time.NewTicker(sync.defaultTimeout / 3)
 	defer janitorTicker.Stop()
@@ -87,15 +87,17 @@ func (sync *SyncClient) synchronizationWorker() {
 		case <-janitorTicker.C: //cleanup old messages and responce waiters
 			now = time.Now().UnixNano()
 			for id, mwt = range sync.unknownMessage {
-				if mwt.timeout < now {
-					delete(sync.unknownMessage, id)
+				if mwt.timeout > now {
+					continue
 				}
+				delete(sync.unknownMessage, id)
 			}
 			for id, mr = range sync.messageToReturn { //fire timeout
-				if mr.timeout < now {
-					mr.responce <- ErrMessageTimeout
-					delete(sync.messageToReturn, id)
+				if mr.timeout > now {
+					continue
 				}
+				mr.responce <- ErrMessageTimeout
+				delete(sync.messageToReturn, id)
 			}
 
 		case r := <-sync.awaitMessageQ: //add messageReceiver to wait responce from back side
@@ -126,17 +128,13 @@ func (sync *SyncClient) synchronizationWorker() {
 			sync.unknownMessage[id] = waitMessage
 		}
 	}
+	// fail rest messages
 	for id, mr = range sync.messageToReturn { //fire timeout
 		mr.responce <- ErrMessageTimeout
 	}
 	for mr = range sync.awaitMessageQ {
 		mr.responce <- ErrMessageTimeout
 	}
-}
-
-//Write message to destination with async way
-func (sync *SyncClient) Write(m *Message) {
-	sync.async.ToSendQ <- m
 }
 
 //WriteNamed write object to destination with async way
@@ -164,7 +162,7 @@ func (sync *SyncClient) WriteAndReadResponce(m *Message) (*Message, error) {
 	if len(m.Name) == 0 {
 		return nil, ErrEmptyName
 	}
-	sync.async.ToSendQ <- m
+	sync.AsyncClient.ToSendQ <- m
 	return sync.read(m.ID)
 }
 
@@ -179,9 +177,4 @@ func (sync *SyncClient) read(id uint32) (*Message, error) {
 		return mes, nil
 	}
 	return nil, errors.New(mes.Name)
-}
-
-//IsAlive indicate is communication is alive or dead
-func (sync *SyncClient) IsAlive() bool {
-	return sync.async.IsAlive()
 }
